@@ -1,1 +1,0 @@
-This temporary directory is used once to import the confirmed PrismCast alpha.41 source snapshot into the repository. It is removed automatically by the import workflow after the source archive is added.
