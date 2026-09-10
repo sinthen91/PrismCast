@@ -1,6 +1,6 @@
 # PrismCast
 
-Current development package: **0.2.0-alpha.31**.
+Current tested development package: **0.2.0-alpha.32**.
 
 PrismCast is a standalone Dalamud plugin for synchronized, world-space media playback in Final Fantasy XIV.
 
@@ -57,8 +57,6 @@ Outputs:
 
 Dalamud's **Dev Plugin Locations** entry must point to the DLL itself.
 
-Run the two-client checks in `TEST_PLAN.md` before publishing the first alpha release.
-
 ## Runtime dependencies
 
 PrismCast downloads its media/runtime tools into its plugin configuration directory as needed:
@@ -78,54 +76,40 @@ Direct invite codes do not require this relay.
 
 ## Repository publishing
 
-The included `pluginmaster.json` is prepared for:
+Repository: `https://github.com/sinthen91/PrismCast`
 
-`https://github.com/sinthen91/PrismCast`
-
-The repository is the source of truth for PrismCast development. Matching alpha releases should publish `PrismCast.zip` before that version is advertised through the custom-repository manifest.
+The repository tracks the tested PrismCast development baseline. Matching alpha packages should only be advertised after the local Windows/Dalamud build succeeds.
 
 ## License and attribution
 
-PrismCast is distributed under AGPL-3.0-or-later. Required third-party attribution is preserved in `THIRD_PARTY_NOTICES.md`. See `LICENSE.md`, `NOTICE`, and `THIRD_PARTY_NOTICES.md`.
+PrismCast is distributed under AGPL-3.0-or-later. Required third-party attribution is preserved in `THIRD_PARTY_NOTICES.md`.
 
+## Alpha 0.2.0.32 changes
 
-## Alpha 5 changes
-
-- Fixed local-file hosting failing with `Not on main thread!` by moving Dalamud/game graphics work to the framework thread.
-- Replaced raw Plex-only setup with a **Connect to Plex** browser sign-in flow.
-- PrismCast now discovers reachable Plex Media Servers and loads their movie libraries.
-- Plex playback no longer depends on the Plex server returning a filesystem path that exists on the PrismCast host PC.
-- Plex media is proxied through the host's temporary PrismCast session, so viewer clients do not receive the host's Plex token.
-- Manual Plex server URL/token fields remain under an Advanced section as a fallback.
-
-
-
-## Alpha 0.2.0.8 changes
-
-- Fixed the API-15 `InputFloat3` overload used by the Exact XYZ editor.
-- Retains the alpha.7 fine-grained position drag controls.
-
-## Alpha 0.2.0.7 changes
-
-- Replaced the huge-range X/Y/Z sliders with fine-grained drag controls.
-- Normal position dragging moves at 0.025 world units per input step.
-- Holding Shift while dragging reduces movement to 0.005 world units for precise placement.
-- Position values display to three decimal places and still support exact typed XYZ values.
-
-## Alpha 0.2.0.6 changes
-
-- Screen position, rotation, scale, and curvature now update live.
-- X/Y/Z sliders plus exact numeric position fields.
-- Yaw/pitch/roll controls are shown in degrees.
-- Plex movie and TV-show libraries are both listed.
-- TV libraries can be browsed show -> season -> episode.
-
+- Replaced the hardcoded four-library mobile Plex layout with a **single dynamic library selector**.
+- The selector is populated from the libraries actually returned by the connected Plex server, so users can have arbitrary names and library counts.
+- **Local Files** is permanently placed at the bottom of the selector instead of being hidden behind an unlabeled toolbar icon.
+- There is deliberately **no All Plex Libraries option**, keeping mobile browsing scoped to one selected library at a time.
+- Added a defined Solution 9-style search field with a magnifying-glass icon and explanatory placeholder text.
+- Search applies to the currently selected source/library.
+- Kept the phone poster browser as a padded three-column grid with wrapped, centered titles.
+- Media buttons retain runtime text such as `PLAY · 1:35:45` when Plex duration metadata is available.
+- The poster/media region is vertically scrollable so every item in the selected library is reachable.
+- Fixed the alpha.32 build failure caused by the duplicate `PrismCastWindow.UiIcon.Search` enum/switch definition.
+- **Build verified successfully on the user's Windows/Dalamud development environment.**
 
 ## Alpha 0.2.0.31 changes
 
 - Redesigned the phone Library screen around the approved mobile mockup.
-- Search now sits directly beneath the PrismCast header.
-- Plex libraries use a 2x2 icon category layout with Movies, TV Shows, Anime, and Anime Movies prioritized.
-- Phone media browsing uses a padded three-column poster grid with centered wrapped titles.
+- Search moved beneath the PrismCast header.
+- Added a padded three-column poster grid with centered wrapped titles.
 - Play buttons show Plex runtime metadata when available and use stronger purple/cyan styling.
-- Local Files remains accessible from the compact phone library toolbar.
+
+## Earlier development highlights
+
+- Fine-grained world-screen position controls with Shift precision movement.
+- Live screen position, yaw/pitch/roll, scale, and curvature updates.
+- Plex browser sign-in and server/library discovery.
+- Plex show → season → episode browsing.
+- Local/Plex hosting through temporary PrismCast sessions without exposing Plex credentials.
+- Synchronized host/viewer screen placement and playback state.
