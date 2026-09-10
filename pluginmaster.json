@@ -5,19 +5,19 @@
     "Punchline": "Synchronized world-space media for FFXIV.",
     "Description": "Host synchronized local, web, YouTube, or Plex media on an in-game world-space screen.",
     "InternalName": "PrismCast",
-    "AssemblyVersion": "0.2.0.32",
-    "TestingAssemblyVersion": "0.2.0.32",
+    "AssemblyVersion": "0.2.0.41",
+    "TestingAssemblyVersion": "0.2.0.41",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
-    "DownloadLinkInstall": "https://github.com/sinthen91/PrismCast/releases/download/v0.2.0-alpha.32/PrismCast.zip",
-    "DownloadLinkUpdate": "https://github.com/sinthen91/PrismCast/releases/download/v0.2.0-alpha.32/PrismCast.zip",
-    "DownloadLinkTesting": "https://github.com/sinthen91/PrismCast/releases/download/v0.2.0-alpha.32/PrismCast.zip",
+    "DownloadLinkInstall": "https://github.com/sinthen91/PrismCast/releases/download/v0.2.0-alpha.41/PrismCast.zip",
+    "DownloadLinkUpdate": "https://github.com/sinthen91/PrismCast/releases/download/v0.2.0-alpha.41/PrismCast.zip",
+    "DownloadLinkTesting": "https://github.com/sinthen91/PrismCast/releases/download/v0.2.0-alpha.41/PrismCast.zip",
     "RepoUrl": "https://github.com/sinthen91/PrismCast",
     "Tags": [
       "utility",
       "media",
       "social"
     ],
-    "Changelog": "Replaced the fixed mobile Plex category grid with a dynamic dropdown sourced from each server, added Local Files at the bottom, added a real search bar, visible scrolling for media results, and fixed the duplicate Search icon build error."
+    "Changelog": "Confirmed alpha.41: removed the 600-item Plex library display cap, aligned normal browsing with full-library search, and added viewport-based poster-grid virtualization for large Plex libraries."
   }
 ]
