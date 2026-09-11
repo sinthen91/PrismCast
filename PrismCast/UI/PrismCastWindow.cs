@@ -1333,7 +1333,10 @@ internal sealed class PrismCastWindow : Window
 
                 var hasBottomPlayer = _session.Mode != PrismMode.Idle && _page != Page.RemoteControl;
                 var pageHeight = ImGui.GetContentRegionAvail().Y - (hasBottomPlayer ? BottomPlayerHeight + 8f : 0f);
-                if (ImGui.BeginChild("##PrismPage", new Vector2(0, Math.Max(1, pageHeight)), false))
+                var pageFlags = _page == Page.JoinSession
+                    ? ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse
+                    : ImGuiWindowFlags.None;
+                if (ImGui.BeginChild("##PrismPage", new Vector2(0, Math.Max(1, pageHeight)), false, pageFlags))
                     DrawCurrentPage();
                 ImGui.EndChild();
 
@@ -1817,7 +1820,10 @@ internal sealed class PrismCastWindow : Window
                 break;
         }
 
-        if (!string.IsNullOrWhiteSpace(_uiStatus))
+        // Session uses full-height responsive columns and renders its status/error text inside
+        // those cards. Appending global status text beneath the columns caused a transient
+        // outer scrollbar every time the automatic group refresh briefly said "Working...".
+        if (_page != Page.JoinSession && !string.IsNullOrWhiteSpace(_uiStatus))
         {
             ImGui.Spacing();
             ImGui.PushStyleColor(ImGuiCol.Text, _uiStatus.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) ? Danger : Muted);
@@ -4013,7 +4019,8 @@ internal sealed class PrismCastWindow : Window
         const float gap = 12f;
         var leftWidth = Math.Clamp((available.X - gap) * 0.44f, 310f, 430f);
 
-        if (ImGui.BeginChild("##TabletSessionActions", new Vector2(leftWidth, available.Y), false))
+        const ImGuiWindowFlags columnFlags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
+        if (ImGui.BeginChild("##TabletSessionActions", new Vector2(leftWidth, available.Y), false, columnFlags))
         {
             DrawPhoneHostSessionContainer();
             ImGui.Spacing();
@@ -4022,7 +4029,7 @@ internal sealed class PrismCastWindow : Window
         ImGui.EndChild();
 
         ImGui.SameLine(0, gap);
-        if (ImGui.BeginChild("##TabletSessionGroups", new Vector2(0, available.Y), false))
+        if (ImGui.BeginChild("##TabletSessionGroups", new Vector2(0, available.Y), false, columnFlags))
             DrawPhoneGroupsContainer();
         ImGui.EndChild();
     }
@@ -4691,7 +4698,7 @@ internal sealed class PrismCastWindow : Window
         if (DateTime.UtcNow < _nextGroupRefresh || _config.PrismRooms.Count == 0)
             return;
         _nextGroupRefresh = DateTime.UtcNow.AddSeconds(12);
-        RunUiTask(RefreshGroupStatusesAsync);
+        RunUiTask(RefreshGroupStatusesAsync, showWorking: false);
     }
 
     private async Task RefreshGroupStatusesAsync()
@@ -6552,31 +6559,33 @@ internal sealed class PrismCastWindow : Window
             false);
     }
 
-    private void RunUiTask(Func<Task> action)
+    private void RunUiTask(Func<Task> action, bool showWorking = true)
     {
         if (_uiTask is { IsCompleted: false } current)
         {
-            _uiStatus = "Working...";
-            _uiTask = QueueUiTaskAsync(current, action);
+            if (showWorking)
+                _uiStatus = "Working...";
+            _uiTask = QueueUiTaskAsync(current, action, showWorking);
             return;
         }
-        _uiStatus = "Working...";
-        _uiTask = ExecuteUiTaskAsync(action);
+        if (showWorking)
+            _uiStatus = "Working...";
+        _uiTask = ExecuteUiTaskAsync(action, showWorking);
     }
 
-    private async Task QueueUiTaskAsync(Task current, Func<Task> action)
+    private async Task QueueUiTaskAsync(Task current, Func<Task> action, bool showWorking)
     {
         try { await current.ConfigureAwait(false); }
         catch { }
-        await ExecuteUiTaskAsync(action).ConfigureAwait(false);
+        await ExecuteUiTaskAsync(action, showWorking).ConfigureAwait(false);
     }
 
-    private async Task ExecuteUiTaskAsync(Func<Task> action)
+    private async Task ExecuteUiTaskAsync(Func<Task> action, bool showWorking)
     {
         try
         {
             await action().ConfigureAwait(false);
-            if (_uiStatus == "Working...")
+            if (showWorking && _uiStatus == "Working...")
                 _uiStatus = "";
         }
         catch (Exception ex)
