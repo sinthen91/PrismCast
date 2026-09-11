@@ -93,6 +93,11 @@ internal sealed class PrismCastWindow : Window
         Link,
         Search,
         Play,
+        Ticket,
+        Crown,
+        Copy,
+        Plus,
+        ChevronRight,
     }
 
     private sealed record PlexBrowsePage(string Title, List<PlexItem> Items);
@@ -405,6 +410,7 @@ internal sealed class PrismCastWindow : Window
     private string _roomJoinCode = "";
     private string _activeJoinedRoomId = "";
     private string _manageRoomId = "";
+    private string _pendingLeaveGroupId = "";
     private List<PrismRoomInfo> _roomStatuses = [];
     private List<PrismNearbySession> _nearbySessions = []; // legacy Nearby prototype
     private DateTime _nextGroupRefresh = DateTime.MinValue;
@@ -936,6 +942,47 @@ internal sealed class PrismCastWindow : Window
                 draw.AddTriangleFilled(p1, p2, p3, c);
                 break;
             }
+            case UiIcon.Ticket:
+            {
+                var min = center - new Vector2(h * 0.92f, h * 0.58f);
+                var max = center + new Vector2(h * 0.92f, h * 0.58f);
+                draw.AddRect(min, max, c, 2f, ImDrawFlags.None, thickness);
+                draw.AddCircleFilled(new Vector2(min.X, center.Y), h * 0.17f, U32(DeviceScreen), 12);
+                draw.AddCircleFilled(new Vector2(max.X, center.Y), h * 0.17f, U32(DeviceScreen), 12);
+                draw.AddLine(center - new Vector2(0, h * 0.38f), center + new Vector2(0, h * 0.38f), c, thickness * 0.72f);
+                break;
+            }
+            case UiIcon.Crown:
+            {
+                var left = center + new Vector2(-h * 0.90f, h * 0.52f);
+                var right = center + new Vector2(h * 0.90f, h * 0.52f);
+                var points = new[]
+                {
+                    left,
+                    center + new Vector2(-h * 0.72f, -h * 0.54f),
+                    center + new Vector2(-h * 0.22f, h * 0.02f),
+                    center + new Vector2(0, -h * 0.82f),
+                    center + new Vector2(h * 0.22f, h * 0.02f),
+                    center + new Vector2(h * 0.72f, -h * 0.54f),
+                    right,
+                };
+                for (var i = 0; i < points.Length - 1; i++)
+                    draw.AddLine(points[i], points[i + 1], c, thickness);
+                draw.AddLine(left, right, c, thickness);
+                break;
+            }
+            case UiIcon.Copy:
+                draw.AddRect(center - new Vector2(h * 0.72f, h * 0.52f), center + new Vector2(h * 0.54f, h * 0.74f), c, 2f, ImDrawFlags.None, thickness);
+                draw.AddRect(center - new Vector2(h * 0.44f, h * 0.78f), center + new Vector2(h * 0.82f, h * 0.48f), c, 2f, ImDrawFlags.None, thickness);
+                break;
+            case UiIcon.Plus:
+                draw.AddLine(center - new Vector2(h * 0.66f, 0), center + new Vector2(h * 0.66f, 0), c, thickness);
+                draw.AddLine(center - new Vector2(0, h * 0.66f), center + new Vector2(0, h * 0.66f), c, thickness);
+                break;
+            case UiIcon.ChevronRight:
+                draw.AddLine(center - new Vector2(h * 0.30f, h * 0.54f), center + new Vector2(h * 0.30f, 0), c, thickness);
+                draw.AddLine(center + new Vector2(h * 0.30f, 0), center + new Vector2(-h * 0.30f, h * 0.54f), c, thickness);
+                break;
             case UiIcon.Gear:
             {
                 // Actual cog silhouette rather than radial spokes, which looked like a star at phone scale.
@@ -3725,6 +3772,151 @@ internal sealed class PrismCastWindow : Window
         DrawPhoneGroupsContainer();
     }
 
+    private static void DrawSessionPanelHeading(string label, UiIcon icon, Vector4 color, string? meta = null)
+    {
+        var origin = ImGui.GetCursorScreenPos();
+        var width = ImGui.GetContentRegionAvail().X;
+        DrawUiIcon(icon, origin + new Vector2(9f, 9f), 17f, color, 1.8f);
+        ImGui.GetWindowDrawList().AddText(origin + new Vector2(22f, 1f), U32(color), label.ToUpperInvariant());
+
+        if (!string.IsNullOrWhiteSpace(meta))
+        {
+            var shown = FitTextToWidth(meta.ToUpperInvariant(), Math.Max(70f, width * 0.36f));
+            var textSize = ImGui.CalcTextSize(shown);
+            ImGui.GetWindowDrawList().AddText(
+                origin + new Vector2(Math.Max(26f, width - textSize.X), 1f), U32(Muted), shown);
+        }
+
+        ImGui.Dummy(new Vector2(width, 20f));
+    }
+
+    private static bool DrawSessionIconButton(string id, UiIcon icon, Vector2 size, bool active = false)
+    {
+        var origin = ImGui.GetCursorScreenPos();
+        var pressed = ImGui.InvisibleButton($"##{id}", size);
+        var hovered = ImGui.IsItemHovered();
+        var draw = ImGui.GetWindowDrawList();
+        var fill = active
+            ? new Vector4(0.34f, 0.14f, 0.58f, 0.98f)
+            : new Vector4(0.075f, 0.085f, 0.155f, 0.98f);
+        if (hovered)
+            fill = new Vector4(0.24f, 0.14f, 0.42f, 1f);
+        draw.AddRectFilled(origin, origin + size, U32(fill), 7f);
+        draw.AddRect(origin, origin + size, U32(active ? AccentHover : S9Blue), 7f, ImDrawFlags.None, active ? 2f : 1.2f);
+        DrawUiIcon(icon, origin + size * 0.5f, MathF.Min(size.X, size.Y) * 0.48f, Vector4.One, 1.8f);
+        return pressed;
+    }
+
+    private static bool DrawSessionCodeInput(string id, ref string value, string hint, UiIcon icon = UiIcon.Ticket)
+    {
+        var cursorX = ImGui.GetCursorPosX();
+        var origin = ImGui.GetCursorScreenPos();
+        var width = Math.Max(120f, ImGui.GetContentRegionAvail().X);
+
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(8f, 8f));
+        var height = ImGui.GetFrameHeight();
+        var draw = ImGui.GetWindowDrawList();
+        draw.AddRectFilled(origin, origin + new Vector2(width, height), U32(new Vector4(0.055f, 0.065f, 0.125f, 1f)), 7f);
+
+        ImGui.SetCursorPosX(cursorX + 40f);
+        ImGui.SetNextItemWidth(Math.Max(70f, width - 40f));
+        ImGui.PushStyleColor(ImGuiCol.FrameBg, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.FrameBgActive, Vector4.Zero);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0f);
+        var submitted = ImGui.InputTextWithHint($"##{id}", hint, ref value, 64, ImGuiInputTextFlags.EnterReturnsTrue);
+        ImGui.PopStyleVar();
+        ImGui.PopStyleColor(3);
+
+        var hovered = ImGui.IsItemHovered();
+        draw.AddRect(origin, origin + new Vector2(width, height), U32(hovered ? AccentHover : S9Blue), 7f,
+            ImDrawFlags.None, hovered ? 1.8f : 1.1f);
+        DrawUiIcon(icon, origin + new Vector2(20f, height * 0.5f), 20f,
+            hovered ? AccentHover : new Vector4(0.76f, 0.72f, 0.96f, 1f), 1.7f);
+        ImGui.PopStyleVar();
+        return submitted;
+    }
+
+    private void DrawSessionMediaHero(string title, MpvPlaybackInfo info)
+    {
+        const float height = 86f;
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.030f, 0.040f, 0.085f, 1f));
+        if (ImGui.BeginChild("##SessionMediaHero", new Vector2(0, height), true, ImGuiWindowFlags.NoScrollbar))
+        {
+            var draw = ImGui.GetWindowDrawList();
+            var min = ImGui.GetWindowPos() + new Vector2(1f, 1f);
+            var max = ImGui.GetWindowPos() + ImGui.GetWindowSize() - new Vector2(1f, 1f);
+            draw.AddRect(min, max, U32(new Vector4(S9Blue.X, S9Blue.Y, S9Blue.Z, 0.58f)), 8f);
+            draw.AddLine(min + new Vector2(12f, 1f), min + new Vector2(Math.Max(34f, ImGui.GetWindowWidth() * 0.62f), 1f),
+                U32(AccentHover), 2f);
+
+            ImGui.SetCursorPos(new Vector2(7f, 7f));
+            if (_nowPlayingPlexItem is { } item)
+            {
+                DrawPlexPoster(item, new Vector2(50f, 70f));
+            }
+            else
+            {
+                var artMin = ImGui.GetCursorScreenPos();
+                var artSize = new Vector2(50f, 70f);
+                draw.AddRectFilled(artMin, artMin + artSize, U32(new Vector4(0.11f, 0.06f, 0.20f, 1f)), 6f);
+                draw.AddRect(artMin, artMin + artSize, U32(new Vector4(Accent.X, Accent.Y, Accent.Z, 0.72f)), 6f);
+                DrawPrismGlyph(artMin + artSize * 0.5f, 15f);
+                ImGui.Dummy(artSize);
+            }
+
+            ImGui.SetCursorPos(new Vector2(68f, 12f));
+            ImGui.PushTextWrapPos(Math.Max(90f, ImGui.GetWindowWidth() - 10f));
+            ImGui.SetWindowFontScale(1.06f);
+            ImGui.TextWrapped(string.IsNullOrWhiteSpace(title) ? "PrismCast session" : title);
+            ImGui.SetWindowFontScale(1f);
+            ImGui.PopTextWrapPos();
+            ImGui.SetCursorPosX(68f);
+            ImGui.TextDisabled($"{FormatTime(info.PositionSeconds)}  /  {FormatTime(info.DurationSeconds)}");
+        }
+        ImGui.EndChild();
+        ImGui.PopStyleColor();
+    }
+
+    private static void DrawCompactSessionTimeline(MpvPlaybackInfo info)
+    {
+        var duration = Math.Max(0, info.DurationSeconds);
+        var position = Math.Clamp(info.PositionSeconds, 0, duration > 0 ? duration : Math.Max(1, info.PositionSeconds));
+        var fraction = duration > 0 ? (float)(position / duration) : 0f;
+        var width = Math.Max(80f, ImGui.GetContentRegionAvail().X);
+        var origin = ImGui.GetCursorScreenPos();
+        var draw = ImGui.GetWindowDrawList();
+        const float height = 5f;
+        draw.AddRectFilled(origin, origin + new Vector2(width, height), U32(new Vector4(0.08f, 0.15f, 0.25f, 1f)), 3f);
+        if (fraction > 0f)
+        {
+            var fill = Math.Max(2f, width * fraction);
+            draw.AddRectFilled(origin, origin + new Vector2(fill, height), U32(S9Cyan), 3f);
+            draw.AddLine(origin + new Vector2(fill, 0), origin + new Vector2(fill, height), U32(AccentHover), 2f);
+        }
+        ImGui.Dummy(new Vector2(width, height));
+    }
+
+    private void DrawSessionCodeCard(string code, bool permanentGroupCode)
+    {
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.035f, 0.055f, 0.105f, 0.99f));
+        if (ImGui.BeginChild("##ActiveSessionCode", new Vector2(0, 79f), true, ImGuiWindowFlags.NoScrollbar))
+        {
+            DrawTechFrame(S9Cyan);
+            ImGui.TextDisabled(permanentGroupCode ? "SESSION CODE  (JOINS THIS GROUP)" : "SESSION CODE  (FOR GUESTS)");
+            var display = string.IsNullOrWhiteSpace(code) ? "------" : code.Trim().ToUpperInvariant();
+            ImGui.SetWindowFontScale(1.48f);
+            ImGui.TextUnformatted(display);
+            ImGui.SetWindowFontScale(1f);
+
+            ImGui.SetCursorPos(new Vector2(Math.Max(8f, ImGui.GetWindowWidth() - 46f), 29f));
+            if (DrawSessionIconButton("CopyActiveSessionCode", UiIcon.Copy, new Vector2(36f, 36f)))
+                ImGui.SetClipboardText(code);
+        }
+        ImGui.EndChild();
+        ImGui.PopStyleColor();
+    }
+
     private void DrawPhoneHostSessionContainer()
     {
         var activeGroup = !string.IsNullOrWhiteSpace(_config.ActiveRoomId)
@@ -3732,132 +3924,121 @@ internal sealed class PrismCastWindow : Window
             : null;
 
         ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.050f, 0.055f, 0.100f, 0.99f));
-        var height = _session.Mode == PrismMode.Hosting ? 210f : _session.Mode == PrismMode.Viewing ? 148f : (_showCreateRoom ? 226f : 176f);
+        var height = _session.Mode == PrismMode.Hosting ? 345f : _session.Mode == PrismMode.Viewing ? 174f : (_showCreateRoom ? 284f : 178f);
         if (ImGui.BeginChild("##HostSessionContainer", new Vector2(0, height), true, ImGuiWindowFlags.NoScrollbar))
         {
             DrawTechFrame(_session.Mode == PrismMode.Hosting ? AccentHover : S9Blue);
 
             if (_session.Mode == PrismMode.Hosting)
             {
-                if (activeGroup is null)
-                {
-                    ImGui.PushStyleColor(ImGuiCol.Text, Good);
-                    ImGui.TextUnformatted("● WATCH PARTY LIVE");
-                    ImGui.PopStyleColor();
-                    ImGui.TextWrapped(CurrentMediaTitle());
-                    ImGui.TextDisabled("This code expires when the Watch Party ends.");
-                    ImGui.Spacing();
-                    ImGui.TextUnformatted("INVITE CODE");
-                    DrawLargeSessionCode(_session.TemporaryCode);
-                    if (ImGui.Button("COPY CODE##WatchParty", new Vector2(116f, 32f)))
-                        ImGui.SetClipboardText(_session.TemporaryCode);
-                }
-                else
-                {
-                    ImGui.PushStyleColor(ImGuiCol.Text, Good);
-                    ImGui.TextUnformatted("● GROUP LIVE");
-                    ImGui.PopStyleColor();
-                    ImGui.SetWindowFontScale(1.08f);
-                    ImGui.TextUnformatted(activeGroup.Name);
-                    ImGui.SetWindowFontScale(1f);
-                    ImGui.TextDisabled(TrimForDisplay(CurrentMediaTitle(), 48));
-                    ImGui.Spacing();
-                    ImGui.TextUnformatted("GROUP INVITE");
-                    DrawLargeSessionCode(activeGroup.InviteCode);
-                    if (ImGui.Button("COPY GROUP CODE##ActiveGroup", new Vector2(146f, 32f)))
-                        ImGui.SetClipboardText(activeGroup.InviteCode);
-                }
+                var viewers = ViewerPresenceRegistry.GetViewerNames();
+                DrawSessionPanelHeading("You are hosting", UiIcon.Crown, AccentHover,
+                    $"{Math.Max(1, viewers.Count + 1)} watching");
+                ImGui.SetWindowFontScale(1.12f);
+                ImGui.TextUnformatted(activeGroup?.Name ?? "Watch Party");
+                ImGui.SetWindowFontScale(1f);
 
-                ImGui.SameLine();
+                var info = _video.ReadInfo();
+                DrawSessionMediaHero(CurrentMediaTitle(), info);
+                DrawCompactSessionTimeline(info);
+                ImGui.Spacing();
+
+                var half = (ImGui.GetContentRegionAvail().X - 8f) * 0.5f;
+                PushTechButton();
+                if (ImGui.Button($"{(info.Paused ? "RESUME" : "PAUSE")}##SessionHost", new Vector2(half, 36f)))
+                    _session.PauseHost(!info.Paused);
+                PopTechButton();
+                ImGui.SameLine(0, 8f);
                 PushDangerButton();
-                if (ImGui.Button("END SESSION", new Vector2(118f, 32f)))
+                if (ImGui.Button("END SESSION", new Vector2(half, 36f)))
                     RunUiTask(StopSessionFromUiAsync);
                 PopDangerButton();
-
-                // This branch exits early, so close the child/style stack before returning.
-                // Leaving it open corrupted the phone layout and caused the bottom nav to disappear.
-                ImGui.EndChild();
-                ImGui.PopStyleColor();
-                return;
+                ImGui.Spacing();
+                DrawSessionCodeCard(activeGroup?.InviteCode ?? _session.TemporaryCode, activeGroup is not null);
             }
-
-            if (_session.Mode == PrismMode.Viewing)
+            else if (_session.Mode == PrismMode.Viewing)
             {
                 var viewingGroup = !string.IsNullOrWhiteSpace(_activeJoinedRoomId)
                     ? _config.PrismRooms.FirstOrDefault(x => string.Equals(x.RoomId, _activeJoinedRoomId, StringComparison.OrdinalIgnoreCase))
                     : null;
-                ImGui.PushStyleColor(ImGuiCol.Text, Good);
-                ImGui.TextUnformatted(viewingGroup is null ? "● WATCH PARTY CONNECTED" : "● GROUP CONNECTED");
-                ImGui.PopStyleColor();
-                if (viewingGroup is not null)
-                    ImGui.TextUnformatted(viewingGroup.Name);
+                DrawSessionPanelHeading("Connected to session", UiIcon.People, Good,
+                    viewingGroup is null ? "Watch Party" : "Group");
+                ImGui.SetWindowFontScale(1.10f);
+                ImGui.TextUnformatted(viewingGroup?.Name ?? "Watch Party");
+                ImGui.SetWindowFontScale(1f);
                 ImGui.TextDisabled(TrimForDisplay(_session.ViewerState?.Title ?? "PrismCast session", 48));
                 ImGui.Spacing();
-                if (ImGui.Button("OPEN REMOTE", new Vector2(132f, 32f)))
+                var half = (ImGui.GetContentRegionAvail().X - 8f) * 0.5f;
+                PushTechButton();
+                if (ImGui.Button("OPEN REMOTE", new Vector2(half, 36f)))
                     SelectPage(Page.RemoteControl);
-                ImGui.SameLine();
+                PopTechButton();
+                ImGui.SameLine(0, 8f);
                 PushDangerButton();
-                if (ImGui.Button("LEAVE SESSION", new Vector2(132f, 32f)))
+                if (ImGui.Button("LEAVE SESSION", new Vector2(half, 36f)))
                     RunUiTask(StopSessionFromUiAsync);
                 PopDangerButton();
-
-                ImGui.EndChild();
-                ImGui.PopStyleColor();
-                return;
             }
-
-            ImGui.TextUnformatted("HOST");
-            ImGui.TextDisabled("Choose what the next video you play from Library should use.");
-            ImGui.Spacing();
-            var half = (ImGui.GetContentRegionAvail().X - 8f) * 0.5f;
-            var watchSelected = string.IsNullOrWhiteSpace(_config.ActiveRoomId);
-            PushTechButton(watchSelected);
-            if (ImGui.Button("WATCH PARTY", new Vector2(half, 38f)))
+            else
             {
-                _config.ActiveRoomId = "";
-                SaveConfig();
-                _uiStatus = "Next media will start a one-time Watch Party.";
-            }
-            PopTechButton();
-            ImGui.SameLine(0, 8f);
-            PushTechButton(_showCreateRoom);
-            if (ImGui.Button("CREATE GROUP", new Vector2(half, 38f)))
-                _showCreateRoom = !_showCreateRoom;
-            PopTechButton();
-
-            ImGui.TextDisabled(watchSelected
-                ? "Watch Party: a new 6-character code is generated when media starts."
-                : "Group selected: the next media session will be available to that group's members.");
-
-            if (_showCreateRoom)
-            {
+                DrawSessionPanelHeading("Host a session", UiIcon.Crown, AccentHover);
+                ImGui.TextDisabled("Choose how the next movie or show you play from Library will be shared.");
                 ImGui.Spacing();
-                ImGui.SetNextItemWidth(-1);
-                ImGui.InputTextWithHint("##NewGroupName", "Group name...", ref _newRoomName, 40);
-                PushTechButton();
-                if (ImGui.Button("CREATE PERMANENT GROUP", new Vector2(-1, 34f)))
+                var half = (ImGui.GetContentRegionAvail().X - 8f) * 0.5f;
+                var watchSelected = string.IsNullOrWhiteSpace(_config.ActiveRoomId);
+                PushTechButton(watchSelected && !_showCreateRoom);
+                if (ImGui.Button("HOST WATCH PARTY", new Vector2(half, 40f)))
                 {
-                    if (string.IsNullOrWhiteSpace(_newRoomName))
-                    {
-                        _uiStatus = "Error: Enter a group name first.";
-                    }
-                    else
-                    {
-                        _uiStatus = "Creating group...";
-                        RunUiTask(CreateGroupAsync);
-                    }
+                    _config.ActiveRoomId = "";
+                    _showCreateRoom = false;
+                    SaveConfig();
+                    _uiStatus = "Next media will start a one-time Watch Party.";
                 }
                 PopTechButton();
+                ImGui.SameLine(0, 8f);
+                PushTechButton(_showCreateRoom);
+                if (ImGui.Button("CREATE GROUP", new Vector2(half, 40f)))
+                    _showCreateRoom = !_showCreateRoom;
+                PopTechButton();
 
-                if (!string.IsNullOrWhiteSpace(_uiStatus) &&
-                    (_uiStatus.Contains("group", StringComparison.OrdinalIgnoreCase) ||
-                     _uiStatus.Contains("directory", StringComparison.OrdinalIgnoreCase)))
+                if (activeGroup is not null && !_showCreateRoom)
+                {
+                    ImGui.PushStyleColor(ImGuiCol.Text, S9Cyan);
+                    ImGui.TextWrapped($"NEXT SESSION: {activeGroup.Name}");
+                    ImGui.PopStyleColor();
+                }
+                else if (!_showCreateRoom)
+                {
+                    ImGui.TextDisabled("A fresh guest code will appear here after playback starts.");
+                }
+
+                if (_showCreateRoom)
                 {
                     ImGui.Spacing();
-                    ImGui.PushStyleColor(ImGuiCol.Text,
-                        _uiStatus.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) ? Danger : Muted);
-                    ImGui.TextWrapped(_uiStatus);
-                    ImGui.PopStyleColor();
+                    DrawSessionCodeInput("NewGroupName", ref _newRoomName, "Name your group...", UiIcon.People);
+                    ImGui.Spacing();
+                    PushTechButton(true);
+                    if (ImGui.Button("CREATE PERMANENT GROUP", new Vector2(-1, 36f)))
+                    {
+                        if (string.IsNullOrWhiteSpace(_newRoomName))
+                            _uiStatus = "Error: Enter a group name first.";
+                        else
+                        {
+                            _uiStatus = "Creating group...";
+                            RunUiTask(CreateGroupAsync);
+                        }
+                    }
+                    PopTechButton();
+
+                    if (!string.IsNullOrWhiteSpace(_uiStatus) &&
+                        (_uiStatus.Contains("group", StringComparison.OrdinalIgnoreCase) ||
+                         _uiStatus.Contains("directory", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        ImGui.PushStyleColor(ImGuiCol.Text,
+                            _uiStatus.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) ? Danger : Muted);
+                        ImGui.TextWrapped(TrimForDisplay(_uiStatus, 62));
+                        ImGui.PopStyleColor();
+                    }
                 }
             }
         }
@@ -3865,30 +4046,32 @@ internal sealed class PrismCastWindow : Window
         ImGui.PopStyleColor();
     }
 
-    private void DrawLargeSessionCode(string code)
-    {
-        var display = string.IsNullOrWhiteSpace(code) ? "------" : code.Trim().ToUpperInvariant();
-        ImGui.SetWindowFontScale(1.45f);
-        ImGui.TextUnformatted(display);
-        ImGui.SetWindowFontScale(1f);
-    }
-
     private void DrawPhoneJoinSessionContainer()
     {
+        var showJoinError = _uiStatus.StartsWith("Error:", StringComparison.OrdinalIgnoreCase);
         ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.050f, 0.055f, 0.100f, 0.99f));
-        if (ImGui.BeginChild("##JoinWatchOrGroup", new Vector2(0, 144f), true, ImGuiWindowFlags.NoScrollbar))
+        if (ImGui.BeginChild("##JoinWatchOrGroup", new Vector2(0, showJoinError ? 160f : 132f), true, ImGuiWindowFlags.NoScrollbar))
         {
-            DrawTechFrame(S9Cyan);
-            ImGui.TextUnformatted("JOIN WATCH PARTY OR GROUP");
-            ImGui.TextDisabled("Enter either a one-time Watch Party code or a permanent Group invite.");
+            DrawTechFrame(AccentHover);
+            var headingOrigin = ImGui.GetCursorScreenPos();
+            var headingWidth = ImGui.GetContentRegionAvail().X;
+            ImGui.GetWindowDrawList().AddText(headingOrigin + new Vector2(0, 2f), U32(S9Cyan), "JOIN A SESSION");
+            var peopleCenter = headingOrigin + new Vector2(headingWidth - 11f, 10f);
+            ImGui.GetWindowDrawList().AddCircle(peopleCenter, 11f, U32(new Vector4(Accent.X, Accent.Y, Accent.Z, 0.78f)), 20, 1.2f);
+            DrawUiIcon(UiIcon.People, peopleCenter, 14f, new Vector4(0.78f, 0.75f, 1f, 1f), 1.4f);
+            ImGui.Dummy(new Vector2(headingWidth, 23f));
+            var submitted = DrawSessionCodeInput("WatchOrGroupCode", ref _invite, "Enter a session code...");
             ImGui.Spacing();
-            ImGui.SetNextItemWidth(-1);
-            ImGui.InputTextWithHint("##WatchOrGroupCode", "Enter invite code...", ref _invite, 64);
-            ImGui.Spacing();
-            PushTechButton();
-            if (ImGui.Button("JOIN", new Vector2(-1, 36f)))
+            PushTechButton(true);
+            if (ImGui.Button("JOIN BY CODE", new Vector2(-1, 37f)) || submitted)
                 BeginWatchPartyOrGroupJoin(_invite);
             PopTechButton();
+            if (showJoinError)
+            {
+                ImGui.PushStyleColor(ImGuiCol.Text, Danger);
+                ImGui.TextWrapped(TrimForDisplay(_uiStatus, 78));
+                ImGui.PopStyleColor();
+            }
         }
         ImGui.EndChild();
         ImGui.PopStyleColor();
@@ -3901,18 +4084,25 @@ internal sealed class PrismCastWindow : Window
         if (ImGui.BeginChild("##YourGroupsContainer", new Vector2(0, remaining), true))
         {
             DrawTechFrame();
-            ImGui.TextUnformatted("YOUR GROUPS");
-            ImGui.SameLine(Math.Max(ImGui.GetCursorPosX() + 8f, ImGui.GetWindowWidth() - 76f));
+            DrawSessionPanelHeading("Your groups", UiIcon.People, S9Cyan);
+
+            var headerX = ImGui.GetCursorPosX();
+            var headerY = ImGui.GetCursorPosY();
+            ImGui.SetCursorPos(new Vector2(Math.Max(8f, ImGui.GetWindowWidth() - 93f), 7f));
             if (ImGui.SmallButton("REFRESH##Groups"))
             {
                 _nextGroupRefresh = DateTime.UtcNow.AddSeconds(10);
                 RunUiTask(RefreshGroupStatusesAsync);
             }
+            ImGui.SameLine(0, 5f);
+            if (DrawSessionIconButton("CreateGroupShortcut", UiIcon.Plus, new Vector2(24f, 24f), _showCreateRoom))
+                _showCreateRoom = true;
+            ImGui.SetCursorPos(new Vector2(headerX, headerY));
 
             if (_config.PrismRooms.Count == 0)
             {
                 ImGui.Spacing();
-                ImGui.TextDisabled("Groups you create or join will appear here.");
+                ImGui.TextDisabled("Groups you create or join will appear here. Use + to create your first group.");
             }
             else
             {
@@ -3933,56 +4123,187 @@ internal sealed class PrismCastWindow : Window
         var locallyLive = group.IsHost && _session.Mode == PrismMode.Hosting &&
                           string.Equals(_config.ActiveRoomId, group.RoomId, StringComparison.OrdinalIgnoreCase);
         var live = locallyLive || status?.Live == true;
+        var expanded = string.Equals(_manageRoomId, group.RoomId, StringComparison.OrdinalIgnoreCase);
+        var width = Math.Max(120f, ImGui.GetContentRegionAvail().X);
+        var size = new Vector2(width, 68f);
+        var origin = ImGui.GetCursorScreenPos();
+        var pressed = ImGui.InvisibleButton($"##GroupSummary{group.RoomId}", size);
+        var hovered = ImGui.IsItemHovered();
+        var draw = ImGui.GetWindowDrawList();
+        var fill = expanded
+            ? new Vector4(0.105f, 0.070f, 0.185f, 1f)
+            : hovered ? new Vector4(0.080f, 0.075f, 0.145f, 1f) : new Vector4(0.035f, 0.045f, 0.085f, 1f);
+        draw.AddRectFilled(origin, origin + size, U32(fill), 9f);
+        draw.AddRect(origin, origin + size, U32(live ? AccentHover : S9Blue), 9f, ImDrawFlags.None, expanded ? 2f : 1.1f);
+        draw.AddLine(origin + new Vector2(9f, 1f), origin + new Vector2(Math.Min(width - 9f, 46f), 1f), U32(S9Cyan), 2f);
 
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.040f, 0.047f, 0.085f, 0.99f));
-        if (ImGui.BeginChild($"##GroupRow{group.RoomId}", new Vector2(0, live ? 112f : 92f), true, ImGuiWindowFlags.NoScrollbar))
+        var avatarMin = origin + new Vector2(7f, 7f);
+        var avatarSize = new Vector2(50f, 54f);
+        draw.AddRectFilled(avatarMin, avatarMin + avatarSize,
+            U32(group.IsHost ? new Vector4(0.24f, 0.09f, 0.43f, 1f) : new Vector4(0.06f, 0.18f, 0.30f, 1f)), 7f);
+        draw.AddRect(avatarMin, avatarMin + avatarSize, U32(group.IsHost ? AccentHover : S9Cyan), 7f);
+        DrawPrismGlyph(avatarMin + avatarSize * 0.5f, 14f);
+
+        var titleX = origin.X + 67f;
+        if (group.IsHost)
         {
-            DrawTechFrame(live ? AccentHover : S9Blue);
-            ImGui.TextUnformatted(group.Name);
-            ImGui.SameLine(Math.Max(ImGui.GetCursorPosX() + 8f, ImGui.GetWindowWidth() - 68f));
-            ImGui.PushStyleColor(ImGuiCol.Text, live ? Good : Muted);
-            ImGui.TextUnformatted(live ? "● LIVE" : "● OFFLINE");
-            ImGui.PopStyleColor();
-            ImGui.TextDisabled(group.IsHost ? "Hosted by you" : "Group member");
-            if (live)
-                ImGui.TextDisabled(TrimForDisplay(status?.Title ?? CurrentMediaTitle(), 46));
+            DrawUiIcon(UiIcon.Crown, new Vector2(titleX + 7f, origin.Y + 19f), 14f, new Vector4(0.98f, 0.79f, 0.24f, 1f), 1.7f);
+            titleX += 18f;
+        }
+        var rightReserve = 112f;
+        var title = FitTextToWidth(group.Name, Math.Max(60f, origin.X + width - rightReserve - titleX));
+        draw.AddText(new Vector2(titleX, origin.Y + 10f), U32(Vector4.One), title);
 
-            ImGui.Spacing();
+        var subtitle = live
+            ? $"Currently hosting · {TrimForDisplay(status?.Title ?? CurrentMediaTitle(), 25)}"
+            : group.IsHost ? "Hosted by you" : "No active session";
+        subtitle = FitTextToWidth(subtitle, Math.Max(60f, width - 146f));
+        draw.AddCircleFilled(new Vector2(origin.X + 70f, origin.Y + 47f), 4f, U32(live ? Good : Muted), 12);
+        draw.AddText(new Vector2(origin.X + 79f, origin.Y + 38f), U32(live ? Good : Muted), subtitle);
+
+        var memberCount = status?.MemberCount ?? 1;
+        var memberText = memberCount == 1 ? "1 MEMBER" : $"{memberCount} MEMBERS";
+        var memberSize = ImGui.CalcTextSize(memberText);
+        draw.AddText(new Vector2(origin.X + width - memberSize.X - 23f, origin.Y + 11f), U32(Muted), memberText);
+        var chevron = new Vector2(origin.X + width - 12f, origin.Y + 43f);
+        if (expanded)
+        {
+            draw.AddLine(chevron - new Vector2(5f, 3f), chevron + new Vector2(0, 3f), U32(S9Cyan), 1.8f);
+            draw.AddLine(chevron + new Vector2(0, 3f), chevron + new Vector2(5f, -3f), U32(S9Cyan), 1.8f);
+        }
+        else
+        {
+            DrawUiIcon(UiIcon.ChevronRight, chevron, 13f, S9Cyan, 1.8f);
+        }
+
+        if (pressed)
+        {
+            _manageRoomId = expanded ? "" : group.RoomId;
+            _pendingLeaveGroupId = "";
+            if (!expanded)
+                RunUiTask(RefreshGroupStatusesAsync);
+        }
+
+        if (!expanded)
+            return;
+
+        ImGui.Spacing();
+        DrawExpandedGroupPanel(group, status, live, locallyLive);
+    }
+
+    private void DrawExpandedGroupPanel(PrismRoomBookmark group, PrismRoomInfo? status, bool live, bool locallyLive)
+    {
+        var members = status?.Members ?? [];
+        var confirmingLeave = string.Equals(_pendingLeaveGroupId, group.RoomId, StringComparison.OrdinalIgnoreCase);
+        var height = Math.Clamp(126f + members.Length * 24f + (confirmingLeave ? 42f : 0f), 180f, 320f);
+
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.035f, 0.045f, 0.085f, 0.99f));
+        if (ImGui.BeginChild($"##ExpandedGroup{group.RoomId}", new Vector2(0, height), true))
+        {
+            DrawTechFrame(live ? AccentHover : S9Cyan);
+            DrawSessionPanelHeading("Group details", UiIcon.People, S9Cyan,
+                live ? "Live now" : "Offline");
+
+            var half = (ImGui.GetContentRegionAvail().X - 8f) * 0.5f;
             if (group.IsHost)
             {
-                if (!live && _session.Mode == PrismMode.Idle)
+                if (locallyLive)
+                {
+                    PushTechButton(true);
+                    if (ImGui.Button($"OPEN REMOTE##GroupDetails{group.RoomId}", new Vector2(half, 32f)))
+                        SelectPage(Page.RemoteControl);
+                    PopTechButton();
+                }
+                else
                 {
                     var selected = string.Equals(_config.ActiveRoomId, group.RoomId, StringComparison.OrdinalIgnoreCase);
                     PushTechButton(selected);
-                    if (ImGui.Button($"{(selected ? "HOST NEXT SELECTED" : "HOST NEXT")}##GroupHost{group.RoomId}", new Vector2(132f, 28f)))
+                    if (ImGui.Button($"{(selected ? "HOST NEXT SELECTED" : "HOST NEXT")}##GroupDetails{group.RoomId}", new Vector2(half, 32f)))
                     {
                         _config.ActiveRoomId = group.RoomId;
                         SaveConfig();
                         _uiStatus = $"Next media will host in {group.Name}.";
                     }
                     PopTechButton();
-                    ImGui.SameLine();
                 }
-                if (!string.IsNullOrWhiteSpace(group.InviteCode))
-                {
-                    if (ImGui.Button($"COPY INVITE##Group{group.RoomId}", new Vector2(104f, 28f)))
-                        ImGui.SetClipboardText(group.InviteCode);
-                }
+                ImGui.SameLine(0, 8f);
+                if (ImGui.Button($"COPY INVITE##GroupDetails{group.RoomId}", new Vector2(half, 32f)))
+                    ImGui.SetClipboardText(group.InviteCode);
             }
             else
             {
                 if (live && !string.IsNullOrWhiteSpace(status?.SessionInviteCode))
                 {
-                    PushTechButton();
-                    if (ImGui.Button($"JOIN LOBBY##Group{group.RoomId}", new Vector2(112f, 28f)))
+                    PushTechButton(true);
+                    if (ImGui.Button($"JOIN LIVE##GroupDetails{group.RoomId}", new Vector2(half, 32f)))
                         JoinGroupLive(status!);
                     PopTechButton();
-                    ImGui.SameLine();
                 }
+                else
+                {
+                    ImGui.BeginDisabled(true);
+                    ImGui.Button($"GROUP OFFLINE##GroupDetails{group.RoomId}", new Vector2(half, 32f));
+                    ImGui.EndDisabled();
+                }
+
+                ImGui.SameLine(0, 8f);
                 PushDangerButton();
-                if (ImGui.Button($"LEAVE GROUP##Group{group.RoomId}", new Vector2(104f, 28f)))
-                    RunUiTask(() => LeaveGroupAsync(group));
+                if (ImGui.Button($"LEAVE GROUP##GroupDetails{group.RoomId}", new Vector2(half, 32f)))
+                    _pendingLeaveGroupId = group.RoomId;
                 PopDangerButton();
+            }
+
+            if (confirmingLeave)
+            {
+                ImGui.Spacing();
+                ImGui.PushStyleColor(ImGuiCol.Text, Danger);
+                ImGui.TextWrapped($"Leave {group.Name}? You will need a new invite to return.");
+                ImGui.PopStyleColor();
+                var confirmWidth = (ImGui.GetContentRegionAvail().X - 8f) * 0.5f;
+                PushDangerButton();
+                if (ImGui.Button($"CONFIRM LEAVE##{group.RoomId}", new Vector2(confirmWidth, 30f)))
+                {
+                    _pendingLeaveGroupId = "";
+                    RunUiTask(() => LeaveGroupAsync(group));
+                }
+                PopDangerButton();
+                ImGui.SameLine(0, 8f);
+                if (ImGui.Button($"CANCEL##Leave{group.RoomId}", new Vector2(confirmWidth, 30f)))
+                    _pendingLeaveGroupId = "";
+            }
+
+            ImGui.Spacing();
+            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.68f, 0.80f, 1f, 1f));
+            ImGui.TextUnformatted("MEMBERS");
+            ImGui.PopStyleColor();
+            ImGui.Separator();
+
+            if (members.Length == 0)
+            {
+                ImGui.TextDisabled("Refresh to load this group's member list.");
+            }
+            else
+            {
+                foreach (var member in members.OrderByDescending(x => x.IsHost)
+                             .ThenBy(x => x.FirstName, StringComparer.OrdinalIgnoreCase))
+                {
+                    ImGui.PushStyleColor(ImGuiCol.Text, member.IsHost ? new Vector4(0.98f, 0.79f, 0.24f, 1f) : Vector4.One);
+                    ImGui.TextUnformatted($"●  {member.FirstName}");
+                    ImGui.PopStyleColor();
+                    if (member.IsHost)
+                    {
+                        ImGui.SameLine();
+                        ImGui.TextDisabled("HOST");
+                    }
+                    else if (group.IsHost)
+                    {
+                        ImGui.SameLine(Math.Max(ImGui.GetCursorPosX() + 10f, ImGui.GetWindowWidth() - 78f));
+                        PushDangerButton();
+                        if (ImGui.SmallButton($"REMOVE##{group.RoomId}{member.ViewerId}"))
+                            RunUiTask(() => KickGroupMemberAsync(group, member.ViewerId));
+                        PopDangerButton();
+                    }
+                }
             }
         }
         ImGui.EndChild();
@@ -4147,8 +4468,21 @@ internal sealed class PrismCastWindow : Window
             _config.PrismRooms.RemoveAll(x => string.Equals(x.RoomId, group.RoomId, StringComparison.OrdinalIgnoreCase));
             if (string.Equals(_activeJoinedRoomId, group.RoomId, StringComparison.OrdinalIgnoreCase))
                 _activeJoinedRoomId = "";
+            if (string.Equals(_manageRoomId, group.RoomId, StringComparison.OrdinalIgnoreCase))
+                _manageRoomId = "";
+            if (string.Equals(_pendingLeaveGroupId, group.RoomId, StringComparison.OrdinalIgnoreCase))
+                _pendingLeaveGroupId = "";
             SaveConfig();
         }).ConfigureAwait(false);
+        await RefreshGroupStatusesAsync().ConfigureAwait(false);
+    }
+
+    private async Task KickGroupMemberAsync(PrismRoomBookmark group, string viewerId)
+    {
+        if (!group.IsHost || string.IsNullOrWhiteSpace(viewerId))
+            return;
+        await _relay.KickRoomMemberAsync(DirectoryUrl, RelayClient.EnsureSecret(_config), group.RoomId,
+            viewerId, CancellationToken.None).ConfigureAwait(false);
         await RefreshGroupStatusesAsync().ConfigureAwait(false);
     }
 
