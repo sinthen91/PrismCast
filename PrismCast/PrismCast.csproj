@@ -20,6 +20,7 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <EmbeddedResource Include="Assets\prismcast-logo.png" />
+    <EmbeddedResource Include="Assets\prismcast-icon.png" />
     <EmbeddedResource Include="Assets\play-white.png" />
     <EmbeddedResource Include="Assets\pause-white.png" />
     <PackageReference Include="SharpCompress" Version="0.50.4" />

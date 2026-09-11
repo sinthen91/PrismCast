@@ -134,7 +134,8 @@ internal sealed class PrismCastWindow : Window
     private const float PhoneStatusBarHeight = 44f;
     private const float PhoneAppHeaderHeight = 106f;
     private const float PhoneBottomNavHeight = 72f;
-    private static readonly Vector2 MiniIdleSize = new(138f, 186f);
+    private static readonly Vector2 TabletDefaultSize = new(1054f, 740f);
+    private static readonly Vector2 MiniIdleSize = new(214f, 186f);
     private static readonly Vector2 MiniActiveSize = new(214f, 508f);
 
     private sealed record ChangelogEntry(string Version, string Title, string[] Changes);
@@ -373,6 +374,7 @@ internal sealed class PrismCastWindow : Window
     private readonly string _posterCacheDirectory;
     private readonly string _uiAssetDirectory;
     private readonly string _logoAssetPath;
+    private readonly string _miniLogoAssetPath;
     private readonly string _playIconPath;
     private readonly string _pauseIconPath;
     private static readonly HttpClient PosterHttp = new();
@@ -395,7 +397,7 @@ internal sealed class PrismCastWindow : Window
     private string _uiStatus = "";
     private Task? _uiTask;
     private bool _minimized;
-    private Vector2 _expandedSize = new(1120, 760);
+    private Vector2 _expandedSize = TabletDefaultSize;
     private readonly string _viewerPresenceId = Guid.NewGuid().ToString("N");
     private readonly Dictionary<string, DateTime> _repeatButtonNextFire = new(StringComparer.Ordinal);
     private int _selectedChangelogIndex;
@@ -448,7 +450,7 @@ internal sealed class PrismCastWindow : Window
         RelayClient relay,
         IObjectTable objects,
         IFramework framework)
-        : base("PrismCast###PrismCastMain", DeviceWindowFlags)
+        : base("PrismCast###PrismCastMainResponsive", DeviceWindowFlags)
     {
         _pi = pi;
         _pi.Inject(this);
@@ -457,9 +459,11 @@ internal sealed class PrismCastWindow : Window
         _uiAssetDirectory = Path.Combine(_pi.GetPluginConfigDirectory(), "ui-assets");
         Directory.CreateDirectory(_uiAssetDirectory);
         _logoAssetPath = Path.Combine(_uiAssetDirectory, "prismcast-logo.png");
+        _miniLogoAssetPath = Path.Combine(_uiAssetDirectory, "prismcast-icon.png");
         _playIconPath = Path.Combine(_uiAssetDirectory, "play-white.png");
         _pauseIconPath = Path.Combine(_uiAssetDirectory, "pause-white.png");
         ExtractEmbeddedUiAsset("prismcast-logo.png", _logoAssetPath);
+        ExtractEmbeddedUiAsset("prismcast-icon.png", _miniLogoAssetPath);
         ExtractEmbeddedUiAsset("play-white.png", _playIconPath);
         ExtractEmbeddedUiAsset("pause-white.png", _pauseIconPath);
         _config = config;
@@ -485,7 +489,7 @@ internal sealed class PrismCastWindow : Window
         _screenScaleEdit = config.ScreenScale;
         _screenCurvedEdit = config.CurvedScreen;
 
-        Size = ConfiguredInterfaceMode() == InterfaceMode.Phone ? new Vector2(440, 1004) : new Vector2(1120, 760);
+        Size = ConfiguredInterfaceMode() == InterfaceMode.Phone ? new Vector2(440, 1004) : TabletDefaultSize;
         SizeCondition = ImGuiCond.FirstUseEver;
         SizeConstraints = GetInitialExpandedConstraints();
     }
@@ -537,7 +541,7 @@ internal sealed class PrismCastWindow : Window
 
     private void ApplyRecommendedWindowSize(InterfaceMode mode)
     {
-        var target = mode == InterfaceMode.Phone ? new Vector2(440, 1004) : new Vector2(1120, 760);
+        var target = mode == InterfaceMode.Phone ? new Vector2(440, 1004) : TabletDefaultSize;
         _expandedSize = target;
         if (!_minimized)
             ImGui.SetWindowSize(target);
@@ -699,7 +703,7 @@ internal sealed class PrismCastWindow : Window
     {
         ImGui.SetCursorPos(new Vector2(12f, 9f));
         var origin = ImGui.GetCursorScreenPos();
-        var size = new Vector2(totalWidth - 24f, 28f);
+        var size = new Vector2(totalWidth - 24f, 30f);
         var pressed = ImGui.InvisibleButton("##MiniExpand", size);
         var hovered = ImGui.IsItemHovered();
         var draw = ImGui.GetWindowDrawList();
@@ -707,10 +711,26 @@ internal sealed class PrismCastWindow : Window
             U32(hovered ? new Vector4(0.17f, 0.09f, 0.29f, 1f) : new Vector4(0.07f, 0.06f, 0.13f, 0.98f)), 8f);
         draw.AddRect(origin, origin + size, U32(hovered ? AccentHover : new Vector4(Accent.X, Accent.Y, Accent.Z, 0.55f)),
             8f, ImDrawFlags.None, 1.2f);
-        DrawPrismGlyph(origin + new Vector2(15f, size.Y * 0.5f), 7f);
+
+        var centerY = size.Y * 0.5f;
+        DrawUiIcon(UiIcon.ArrowLeft, origin + new Vector2(12f, centerY), 11f,
+            hovered ? Vector4.One : new Vector4(0.78f, 0.82f, 1f, 1f), 1.8f);
+        var backLabel = "Back";
+        var backSize = ImGui.CalcTextSize(backLabel);
+        draw.AddText(new Vector2(origin.X + 22f, origin.Y + (size.Y - backSize.Y) * 0.5f),
+            U32(hovered ? Vector4.One : new Vector4(0.78f, 0.82f, 1f, 1f)), backLabel);
+
         var label = "PrismCast";
         var textSize = ImGui.CalcTextSize(label);
-        draw.AddText(new Vector2(origin.X + 29f, origin.Y + (size.Y - textSize.Y) * 0.5f), U32(Vector4.One), label);
+        const float logoSize = 16f;
+        const float brandGap = 4f;
+        var brandWidth = logoSize + brandGap + textSize.X;
+        var brandX = origin.X + (size.X - brandWidth) * 0.5f;
+        var logoMin = new Vector2(brandX, origin.Y + (size.Y - logoSize) * 0.5f);
+        if (!DrawUiAssetAt(draw, _miniLogoAssetPath, logoMin, new Vector2(logoSize)))
+            DrawPrismGlyph(logoMin + new Vector2(logoSize * 0.5f), 6f);
+        draw.AddText(new Vector2(brandX + logoSize + brandGap, origin.Y + (size.Y - textSize.Y) * 0.5f),
+            U32(Vector4.One), label);
         return pressed;
     }
 
@@ -790,16 +810,17 @@ internal sealed class PrismCastWindow : Window
     private void DrawMiniIdleLogo()
     {
         var draw = ImGui.GetWindowDrawList();
-        var min = ImGui.GetWindowPos() + new Vector2(22, 52);
-        var max = min + new Vector2(MiniIdleSize.X - 44f, 62f);
+        var min = ImGui.GetWindowPos() + new Vector2(22, 48);
+        var max = min + new Vector2(MiniIdleSize.X - 44f, 70f);
         draw.AddRectFilled(min, max, ImGui.ColorConvertFloat4ToU32(new Vector4(Accent.X, Accent.Y, Accent.Z, 0.10f)), 12f);
         draw.AddRect(min, max, ImGui.ColorConvertFloat4ToU32(new Vector4(Accent.X, Accent.Y, Accent.Z, 0.45f)), 12f);
-        var logo = "◆";
-        var logoSize = ImGui.CalcTextSize(logo);
-        draw.AddText(new Vector2((min.X + max.X - logoSize.X) * 0.5f, min.Y + 12f), ImGui.ColorConvertFloat4ToU32(AccentHover), logo);
+        const float logoSize = 36f;
+        var logoMin = new Vector2((min.X + max.X - logoSize) * 0.5f, min.Y + 4f);
+        if (!DrawUiAssetAt(draw, _miniLogoAssetPath, logoMin, new Vector2(logoSize)))
+            DrawPrismGlyph(logoMin + new Vector2(logoSize * 0.5f), 12f);
         var ready = "READY";
         var readySize = ImGui.CalcTextSize(ready);
-        draw.AddText(new Vector2((min.X + max.X - readySize.X) * 0.5f, min.Y + 36f), ImGui.ColorConvertFloat4ToU32(Muted), ready);
+        draw.AddText(new Vector2((min.X + max.X - readySize.X) * 0.5f, min.Y + 46f), ImGui.ColorConvertFloat4ToU32(Muted), ready);
     }
 
     private void DrawMiniArtwork()
@@ -1239,6 +1260,27 @@ internal sealed class PrismCastWindow : Window
         return false;
     }
 
+    private bool DrawUiAssetAt(ImDrawListPtr draw, string path, Vector2 min, Vector2 size)
+    {
+        if (!File.Exists(path))
+            return false;
+
+        try
+        {
+            var shared = TextureProvider.GetFromFileAbsolute(path);
+            if (shared.TryGetWrap(out var wrap, out _) && wrap is not null)
+            {
+                draw.AddImage(wrap.Handle, min, min + size);
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
+    }
+
     private void DrawShell()
     {
         if (EffectiveInterfaceMode() == InterfaceMode.Phone)
@@ -1556,15 +1598,15 @@ internal sealed class PrismCastWindow : Window
                 _ => "READY"
             };
             var statusColor = _session.Mode == PrismMode.Idle ? Muted : Good;
-            const float buttonWidth = 42f;
-            const float buttonHeight = 34f;
+            const float buttonWidth = 36f;
+            const float buttonHeight = 28f;
             const float gap = 7f;
             var buttonCount = _session.Mode == PrismMode.Hosting ? 3 : 2;
             var controlsWidth = buttonWidth * buttonCount + gap * (buttonCount - 1);
-            var controlsX = w - controlsWidth - 10f;
+            var controlsX = w - controlsWidth - 14f;
             var statusText = $"● {status}";
             var statusWidth = ImGui.CalcTextSize(statusText).X;
-            ImGui.SetCursorPos(new Vector2(Math.Max(12f, controlsX - statusWidth - 20f), 15f));
+            ImGui.SetCursorPos(new Vector2(Math.Max(12f, controlsX - statusWidth - 20f), 13f));
             ImGui.PushStyleColor(ImGuiCol.Text, statusColor);
             ImGui.TextUnformatted(statusText);
             ImGui.PopStyleColor();
@@ -1572,18 +1614,18 @@ internal sealed class PrismCastWindow : Window
             var nextX = controlsX;
             if (_session.Mode == PrismMode.Hosting)
             {
-                if (DrawTabletHeaderButton("StopTabletSession", new Vector2(nextX, 5f),
+                if (DrawTabletHeaderButton("StopTabletSession", new Vector2(nextX, 8f),
                         new Vector2(buttonWidth, buttonHeight), HeaderButtonIcon.Stop))
                     RunUiTask(StopSessionFromUiAsync);
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("Stop Session");
                 nextX += buttonWidth + gap;
             }
-            if (DrawTabletHeaderButton("MinimizePrism", new Vector2(nextX, 5f),
+            if (DrawTabletHeaderButton("MinimizePrism", new Vector2(nextX, 8f),
                     new Vector2(buttonWidth, buttonHeight), HeaderButtonIcon.Minimize))
                 SetMinimized(true);
             nextX += buttonWidth + gap;
-            if (DrawTabletHeaderButton("ClosePrism", new Vector2(nextX, 5f),
+            if (DrawTabletHeaderButton("ClosePrism", new Vector2(nextX, 8f),
                     new Vector2(buttonWidth, buttonHeight), HeaderButtonIcon.Close))
                 IsOpen = false;
         }
@@ -1614,20 +1656,20 @@ internal sealed class PrismCastWindow : Window
         var draw = ImGui.GetWindowDrawList();
         var max = origin + size;
         var center = origin + size * 0.5f;
-        draw.AddRectFilled(origin, max, U32(fill), 8f);
-        draw.AddRect(origin, max, U32(border), 8f, ImDrawFlags.None, 1.5f);
+        draw.AddRectFilled(origin, max, U32(fill), 7f);
+        draw.AddRect(origin, max, U32(border), 7f, ImDrawFlags.None, 1.4f);
 
         switch (icon)
         {
             case HeaderButtonIcon.Stop:
-                draw.AddRectFilled(center - new Vector2(5f), center + new Vector2(5f), U32(Vector4.One), 1.5f);
+                draw.AddRectFilled(center - new Vector2(4f), center + new Vector2(4f), U32(Vector4.One), 1.3f);
                 break;
             case HeaderButtonIcon.Minimize:
-                draw.AddLine(center + new Vector2(-9f, 4f), center + new Vector2(9f, 4f), U32(Vector4.One), 2.8f);
+                draw.AddLine(center + new Vector2(-7f, 3f), center + new Vector2(7f, 3f), U32(Vector4.One), 2.3f);
                 break;
             case HeaderButtonIcon.Close:
-                draw.AddLine(center + new Vector2(-7f, -7f), center + new Vector2(7f, 7f), U32(Vector4.One), 2.6f);
-                draw.AddLine(center + new Vector2(7f, -7f), center + new Vector2(-7f, 7f), U32(Vector4.One), 2.6f);
+                draw.AddLine(center + new Vector2(-6f, -6f), center + new Vector2(6f, 6f), U32(Vector4.One), 2.3f);
+                draw.AddLine(center + new Vector2(6f, -6f), center + new Vector2(-6f, 6f), U32(Vector4.One), 2.3f);
                 break;
         }
         return pressed;
@@ -1737,6 +1779,8 @@ internal sealed class PrismCastWindow : Window
         };
 
         ImGui.Dummy(new Vector2(1, 5));
+        ImGui.SetCursorPosX(14f);
+        ImGui.SetWindowFontScale(1.10f);
         ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.92f, 0.94f, 1f, 1f));
         ImGui.TextUnformatted(title);
         ImGui.PopStyleColor();
@@ -1744,6 +1788,7 @@ internal sealed class PrismCastWindow : Window
         ImGui.PushStyleColor(ImGuiCol.Text, Accent);
         ImGui.TextUnformatted("///");
         ImGui.PopStyleColor();
+        ImGui.SetWindowFontScale(1f);
         ImGui.Dummy(new Vector2(1, 5));
     }
 
@@ -5997,15 +6042,29 @@ internal sealed class PrismCastWindow : Window
         {
             var info = _video.ReadInfo();
             var title = CurrentMediaTitle();
-            ImGui.TextUnformatted(TrimForDisplay(string.IsNullOrWhiteSpace(title) ? "PrismCast session" : title, 62));
+            var width = ImGui.GetWindowWidth();
+            const float leftPad = 14f;
+            const float rightPad = 12f;
+            const float actionGap = 8f;
+            var actionWidth = _session.Mode == PrismMode.Hosting
+                ? 76f + actionGap + 72f
+                : _session.Mode == PrismMode.Viewing ? 82f : 0f;
+            var actionX = width - rightPad - actionWidth;
+            var titlePixelWidth = Math.Max(120f, actionX - leftPad - 18f);
+            var maxTitleCharacters = Math.Clamp((int)(titlePixelWidth / 7f), 18, 62);
+            var displayTitle = string.IsNullOrWhiteSpace(title) ? "PrismCast session" : title;
+
+            ImGui.SetCursorPos(new Vector2(leftPad, 11f));
+            ImGui.TextUnformatted(TrimForDisplay(displayTitle, maxTitleCharacters));
+            ImGui.SetCursorPos(new Vector2(leftPad, 34f));
             ImGui.TextDisabled($"{FormatTime(info.PositionSeconds)} / {FormatTime(info.DurationSeconds)}");
 
             if (_session.Mode == PrismMode.Hosting)
             {
-                ImGui.SameLine(Math.Max(0, ImGui.GetWindowWidth() - 190));
+                ImGui.SetCursorPos(new Vector2(actionX, 20f));
                 if (ImGui.Button(info.Paused ? "Play" : "Pause", new Vector2(76, 28)))
                     _session.PauseHost(!info.Paused);
-                ImGui.SameLine();
+                ImGui.SameLine(0, actionGap);
                 PushDangerButton();
                 if (ImGui.Button("Stop", new Vector2(72, 28)))
                     RunUiTask(StopSessionFromUiAsync);
@@ -6013,7 +6072,7 @@ internal sealed class PrismCastWindow : Window
             }
             else if (_session.Mode == PrismMode.Viewing)
             {
-                ImGui.SameLine(Math.Max(0, ImGui.GetWindowWidth() - 110));
+                ImGui.SetCursorPos(new Vector2(actionX, 20f));
                 if (ImGui.Button("Leave", new Vector2(82, 28)))
                     RunUiTask(StopSessionFromUiAsync);
             }
