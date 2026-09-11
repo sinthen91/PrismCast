@@ -1182,7 +1182,7 @@ internal sealed class PrismCastWindow : Window
                 DrawTopBar();
                 ImGui.Separator();
 
-                var hasBottomPlayer = _session.Mode != PrismMode.Idle;
+                var hasBottomPlayer = _session.Mode != PrismMode.Idle && _page != Page.RemoteControl;
                 var pageHeight = ImGui.GetContentRegionAvail().Y - (hasBottomPlayer ? BottomPlayerHeight + 8f : 0f);
                 if (ImGui.BeginChild("##PrismPage", new Vector2(0, Math.Max(1, pageHeight)), false))
                     DrawCurrentPage();
@@ -1442,15 +1442,12 @@ internal sealed class PrismCastWindow : Window
             draw.AddLine(origin + new Vector2(12, DeviceHeaderHeight - 1), origin + new Vector2(w - 12, DeviceHeaderHeight - 1), U32(new Vector4(S9Blue.X, S9Blue.Y, S9Blue.Z, 0.35f)), 1f);
             draw.AddLine(origin + new Vector2(12, DeviceHeaderHeight - 1), origin + new Vector2(90, DeviceHeaderHeight - 1), U32(Accent), 2f);
 
-            DrawPrismGlyph(origin + new Vector2(22, DeviceHeaderHeight * 0.5f), 10f);
-            ImGui.SetCursorPos(new Vector2(39, 10));
-            ImGui.TextUnformatted("PrismCast");
-            if (!isPhone)
+            ImGui.SetCursorPos(new Vector2(8f, 1f));
+            if (!DrawUiAsset(_logoAssetPath, new Vector2(136f, 44f)))
             {
-                ImGui.SameLine(0, 9f);
-                ImGui.PushStyleColor(ImGuiCol.Text, Muted);
-                ImGui.TextUnformatted("SOLUTION 9 // MEDIA LINK");
-                ImGui.PopStyleColor();
+                DrawPrismGlyph(origin + new Vector2(22, DeviceHeaderHeight * 0.5f), 10f);
+                ImGui.SetCursorPos(new Vector2(39, 10));
+                ImGui.TextUnformatted("PrismCast");
             }
 
             var status = _session.Mode switch
@@ -1461,7 +1458,7 @@ internal sealed class PrismCastWindow : Window
             };
             var statusColor = _session.Mode == PrismMode.Idle ? Muted : Good;
             const float b = 30f;
-            var buttonCount = isPhone ? 4 : 2;
+            var buttonCount = isPhone ? 4 : _session.Mode == PrismMode.Hosting ? 3 : 2;
             var startButtons = w - (b * buttonCount) - (2f * (buttonCount - 1)) - 10f;
 
             if (!isPhone)
@@ -1481,6 +1478,17 @@ internal sealed class PrismCastWindow : Window
                 if (ImGui.Button("N##OpenChangelog", new Vector2(b, 28))) SelectPage(Page.Changelog);
                 ImGui.SameLine(0, 2f);
                 if (ImGui.Button("S##OpenSettings", new Vector2(b, 28))) SelectPage(Page.Settings);
+                ImGui.SameLine(0, 2f);
+            }
+            else if (_session.Mode == PrismMode.Hosting)
+            {
+                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.34f, 0.07f, 0.12f, 0.98f));
+                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.66f, 0.12f, 0.20f, 1f));
+                if (ImGui.Button("■##StopTabletSession", new Vector2(b, 28)))
+                    RunUiTask(StopSessionFromUiAsync);
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Stop Session");
+                ImGui.PopStyleColor(2);
                 ImGui.SameLine(0, 2f);
             }
             if (ImGui.Button("–##MinimizePrism", new Vector2(b, 28))) SetMinimized(true);
@@ -1624,6 +1632,8 @@ internal sealed class PrismCastWindow : Window
 
     private void SelectPage(Page page)
     {
+        if (page == Page.Settings && _page != Page.Settings)
+            _phoneSettingsHome = true;
         _page = page;
         if (_config.RememberLastPage)
         {
@@ -1842,48 +1852,23 @@ internal sealed class PrismCastWindow : Window
         ImGui.Spacing();
 
         var phone = EffectiveInterfaceMode() == InterfaceMode.Phone;
-        if (phone)
+        var screenHeight = phone
+            ? Math.Max(388f, ImGui.GetContentRegionAvail().Y)
+            : Math.Max(292f, ImGui.GetContentRegionAvail().Y);
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.055f, 0.060f, 0.105f, 0.98f));
+        if (ImGui.BeginChild("##ScreenControlCard", new Vector2(0, screenHeight), true,
+                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
         {
-            var screenHeight = Math.Max(388f, ImGui.GetContentRegionAvail().Y);
-            ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.055f, 0.060f, 0.105f, 0.98f));
-            if (ImGui.BeginChild("##ScreenControlCard", new Vector2(0, screenHeight), true,
-                    ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
-            {
-                DrawTechFrame();
-                DrawPhoneScreenControls();
-            }
-            ImGui.EndChild();
-            ImGui.PopStyleColor();
+            DrawTechFrame();
+            DrawPhoneScreenControls();
         }
-        else
-        {
-            var avail = ImGui.GetContentRegionAvail().X;
-            var split = Math.Max(390, (avail - 10f) * 0.62f);
-            ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.055f, 0.060f, 0.105f, 0.98f));
-            if (ImGui.BeginChild("##ScreenControlCard", new Vector2(split, 316), true))
-            {
-                DrawTechFrame();
-                DrawScreenControlCard();
-            }
-            ImGui.EndChild();
-            ImGui.PopStyleColor();
-            ImGui.SameLine(0, 10f);
-            ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.055f, 0.060f, 0.105f, 0.98f));
-            if (ImGui.BeginChild("##SessionCard", new Vector2(0, 316), true))
-            {
-                DrawTechFrame(S9Cyan);
-                DrawSessionCard();
-            }
-            ImGui.EndChild();
-            ImGui.PopStyleColor();
-
-        }
+        ImGui.EndChild();
+        ImGui.PopStyleColor();
     }
 
     private void DrawNowPlayingCard()
     {
-        var phone = EffectiveInterfaceMode() == InterfaceMode.Phone;
-        var cardHeight = phone ? 246f : 194f;
+        const float cardHeight = 246f;
         ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.050f, 0.055f, 0.100f, 0.99f));
         if (ImGui.BeginChild("##NowPlayingCard", new Vector2(0, cardHeight), true))
         {
@@ -1892,85 +1877,63 @@ internal sealed class PrismCastWindow : Window
             var title = CurrentMediaTitle();
             if (string.IsNullOrWhiteSpace(title)) title = "Nothing playing";
 
-            if (phone)
-            {
-                const float leftPad = 14f;
-                const float topPad = 14f;
-                const float posterW = 104f;
-                const float posterH = 146f;
-                ImGui.SetCursorPos(new Vector2(leftPad, topPad));
-                if (_session.Mode != PrismMode.Idle && _nowPlayingPlexItem is { } item)
-                    DrawPlexPoster(item, new Vector2(posterW, posterH));
-                else
-                {
-                    var min = ImGui.GetCursorScreenPos();
-                    var max = min + new Vector2(posterW, posterH);
-                    var draw = ImGui.GetWindowDrawList();
-                    draw.AddRectFilled(min, max, U32(new Vector4(0.03f, 0.04f, 0.08f, 1f)), 10f);
-                    draw.AddRect(min, max, U32(new Vector4(S9Blue.X, S9Blue.Y, S9Blue.Z, 0.60f)), 10f);
-                    DrawPrismGlyph((min + max) * 0.5f, 21f);
-                    ImGui.Dummy(new Vector2(posterW, posterH));
-                }
-
-                var metaX = leftPad + posterW + 16f;
-                var metaW = Math.Max(160f, ImGui.GetWindowWidth() - metaX - 14f);
-                ImGui.SetCursorPos(new Vector2(metaX, topPad + 4f));
-                if (ImGui.BeginChild("##NowMetaPhone", new Vector2(metaW, posterH - 4f), false))
-                {
-                    ImGui.PushStyleColor(ImGuiCol.Text, AccentHover);
-                    ImGui.TextUnformatted("NOW PLAYING");
-                    ImGui.PopStyleColor();
-                    ImGui.Spacing();
-                    ImGui.SetWindowFontScale(1.14f);
-                    ImGui.TextWrapped(title);
-                    ImGui.SetWindowFontScale(1f);
-                    ImGui.TextDisabled(_session.Mode == PrismMode.Hosting ? "Host session" : _session.Mode == PrismMode.Viewing ? "Connected to host" : "Choose media from Library");
-                    ImGui.Spacing();
-                    DrawPhoneTimeline(info);
-                }
-                ImGui.EndChild();
-
-                const float small = 58f;
-                const float main = 72f;
-                const float gap = 24f;
-                var total = small * 2f + main + gap * 2f;
-                var x = Math.Max(12f, (ImGui.GetWindowWidth() - total) * 0.5f);
-                var y = cardHeight - main - 12f;
-                var transportEnabled = _session.Mode == PrismMode.Hosting;
-                ImGui.BeginDisabled(!transportEnabled);
-                ImGui.SetCursorPos(new Vector2(x, y + (main - small) * 0.5f));
-                if (CircleTechButton("SeekBackPhone", "-10", small) && transportEnabled)
-                    _session.SeekHost(Math.Max(0, info.PositionSeconds - 10));
-                ImGui.SetCursorPos(new Vector2(x + small + gap, y));
-                var mediaIcon = info.Paused || _session.Mode == PrismMode.Idle ? _playIconPath : _pauseIconPath;
-                if (CircleMediaButton("PlayPausePhone", mediaIcon, main, true) && transportEnabled)
-                    _session.PauseHost(!info.Paused);
-                ImGui.SetCursorPos(new Vector2(x + small + gap + main + gap, y + (main - small) * 0.5f));
-                if (CircleTechButton("SeekForwardPhone", "+10", small) && transportEnabled)
-                    _session.SeekHost(info.PositionSeconds + 10);
-                ImGui.EndDisabled();
-            }
+            const float leftPad = 14f;
+            const float topPad = 14f;
+            const float posterW = 104f;
+            const float posterH = 146f;
+            ImGui.SetCursorPos(new Vector2(leftPad, topPad));
+            if (_session.Mode != PrismMode.Idle && _nowPlayingPlexItem is { } item)
+                DrawPlexPoster(item, new Vector2(posterW, posterH));
             else
             {
-                DrawSectionHeading("Now Playing", "///");
-                ImGui.TextWrapped(title);
-                ImGui.TextDisabled(_session.Mode == PrismMode.Hosting ? "Host session" : _session.Mode == PrismMode.Viewing ? "Remote session" : "No active source");
-                ImGui.Spacing();
-                DrawTimeline(info);
-                ImGui.Spacing();
-                if (_session.Mode == PrismMode.Hosting)
-                {
-                    if (ImGui.Button(info.Paused ? "PLAY" : "PAUSE", new Vector2(90, 32))) _session.PauseHost(!info.Paused);
-                    ImGui.SameLine();
-                    if (ImGui.Button("-10", new Vector2(70, 32))) _session.SeekHost(Math.Max(0, info.PositionSeconds - 10));
-                    ImGui.SameLine();
-                    if (ImGui.Button("+10", new Vector2(70, 32))) _session.SeekHost(info.PositionSeconds + 10);
-                    ImGui.SameLine();
-                    PushDangerButton();
-                    if (ImGui.Button("POWER", new Vector2(92, 32))) RunUiTask(StopSessionFromUiAsync);
-                    PopDangerButton();
-                }
+                var min = ImGui.GetCursorScreenPos();
+                var max = min + new Vector2(posterW, posterH);
+                var draw = ImGui.GetWindowDrawList();
+                draw.AddRectFilled(min, max, U32(new Vector4(0.03f, 0.04f, 0.08f, 1f)), 10f);
+                draw.AddRect(min, max, U32(new Vector4(S9Blue.X, S9Blue.Y, S9Blue.Z, 0.60f)), 10f);
+                DrawPrismGlyph((min + max) * 0.5f, 21f);
+                ImGui.Dummy(new Vector2(posterW, posterH));
             }
+
+            var metaX = leftPad + posterW + 16f;
+            var metaW = Math.Max(160f, ImGui.GetWindowWidth() - metaX - 14f);
+            ImGui.SetCursorPos(new Vector2(metaX, topPad + 4f));
+            if (ImGui.BeginChild("##ResponsiveNowPlayingMeta", new Vector2(metaW, posterH - 4f), false))
+            {
+                ImGui.PushStyleColor(ImGuiCol.Text, AccentHover);
+                ImGui.TextUnformatted("NOW PLAYING");
+                ImGui.PopStyleColor();
+                ImGui.Spacing();
+                ImGui.SetWindowFontScale(1.14f);
+                ImGui.TextWrapped(title);
+                ImGui.SetWindowFontScale(1f);
+                ImGui.TextDisabled(_session.Mode == PrismMode.Hosting
+                    ? "Host session"
+                    : _session.Mode == PrismMode.Viewing ? "Connected to host" : "Choose media from Library");
+                ImGui.Spacing();
+                DrawPhoneTimeline(info);
+            }
+            ImGui.EndChild();
+
+            const float small = 58f;
+            const float main = 72f;
+            const float gap = 24f;
+            var total = small * 2f + main + gap * 2f;
+            var x = Math.Max(12f, (ImGui.GetWindowWidth() - total) * 0.5f);
+            var y = cardHeight - main - 12f;
+            var transportEnabled = _session.Mode == PrismMode.Hosting;
+            ImGui.BeginDisabled(!transportEnabled);
+            ImGui.SetCursorPos(new Vector2(x, y + (main - small) * 0.5f));
+            if (CircleTechButton("SeekBackResponsive", "-10", small) && transportEnabled)
+                _session.SeekHost(Math.Max(0, info.PositionSeconds - 10));
+            ImGui.SetCursorPos(new Vector2(x + small + gap, y));
+            var mediaIcon = info.Paused || _session.Mode == PrismMode.Idle ? _playIconPath : _pauseIconPath;
+            if (CircleMediaButton("PlayPauseResponsive", mediaIcon, main, true) && transportEnabled)
+                _session.PauseHost(!info.Paused);
+            ImGui.SetCursorPos(new Vector2(x + small + gap + main + gap, y + (main - small) * 0.5f));
+            if (CircleTechButton("SeekForwardResponsive", "+10", small) && transportEnabled)
+                _session.SeekHost(info.PositionSeconds + 10);
+            ImGui.EndDisabled();
         }
         ImGui.EndChild();
         ImGui.PopStyleColor();
@@ -2011,6 +1974,12 @@ internal sealed class PrismCastWindow : Window
 
     private void DrawPhoneScreenControls()
     {
+        if (EffectiveInterfaceMode() == InterfaceMode.Tablet)
+        {
+            DrawTabletScreenControls();
+            return;
+        }
+
         ImGui.SetCursorPos(new Vector2(14f, 12f));
         var headingPos = ImGui.GetCursorScreenPos();
         DrawUiIcon(UiIcon.Monitor, headingPos + new Vector2(10f, 9f), 18f, new Vector4(0.58f, 0.75f, 1f, 1f), 1.8f);
@@ -2099,6 +2068,123 @@ internal sealed class PrismCastWindow : Window
             ImGui.SetCursorPos(new Vector2(14f, actionY + actionH + 38f));
             ImGui.TextDisabled("Start media from Library to activate shared controls.");
         }
+    }
+
+    private void DrawTabletScreenControls()
+    {
+        ImGui.SetCursorPos(new Vector2(14f, 12f));
+        var headingPos = ImGui.GetCursorScreenPos();
+        DrawUiIcon(UiIcon.Monitor, headingPos + new Vector2(10f, 9f), 18f,
+            new Vector4(0.58f, 0.75f, 1f, 1f), 1.8f);
+        ImGui.SetCursorPosX(40f);
+        DrawSectionHeading("Screen Controls", "///");
+
+        if (_session.Mode == PrismMode.Viewing)
+        {
+            SyncViewerScreenEditors();
+            ImGui.SetCursorPosX(14f);
+            ImGui.TextDisabled("HOST CONTROLLED");
+            ImGui.TextWrapped("The host owns shared screen placement. Your local playback volume is independent.");
+            return;
+        }
+
+        var enabled = _session.Mode == PrismMode.Hosting;
+        var moveStep = Math.Max(0.001f,
+            ImGui.GetIO().KeyShift ? _config.ScreenFineMovementStep : _config.ScreenMovementStep);
+        var rotationStep = Math.Max(0.1f, _config.ScreenRotationStepDegrees);
+        var scaleStep = Math.Max(0.005f, _config.ScreenScaleStep);
+        var childWidth = ImGui.GetWindowWidth();
+        const float gap = 8f;
+
+        ImGui.BeginDisabled(!enabled);
+        ImGui.SetCursorPos(new Vector2(14f, 40f));
+        if (RepeatTechActionButton("TabletScaleDown", "Scale -", new Vector2(78f, 28f)))
+        {
+            _screenScaleEdit -= scaleStep;
+            ApplyScreenEdits();
+        }
+        ImGui.SameLine(0, gap);
+        if (RepeatTechActionButton("TabletScaleUp", "Scale +", new Vector2(78f, 28f)))
+        {
+            _screenScaleEdit += scaleStep;
+            ApplyScreenEdits();
+        }
+
+        const float modeWidth = 66f;
+        var modeX = childWidth - modeWidth * 2f - gap - 14f;
+        ImGui.SetCursorPos(new Vector2(modeX, 40f));
+        ImGui.SetNextItemWidth(modeWidth);
+        if (SegmentButton("Flat", !_screenCurvedEdit))
+        {
+            _screenCurvedEdit = false;
+            ApplyScreenEdits();
+        }
+        ImGui.SameLine(0, gap);
+        ImGui.SetNextItemWidth(modeWidth);
+        if (SegmentButton("Curved", _screenCurvedEdit))
+        {
+            _screenCurvedEdit = true;
+            ApplyScreenEdits();
+        }
+
+        const float padWidth = 68f;
+        const float padHeight = 48f;
+        const float padX = 18f;
+        const float padY = 76f;
+        var padColumn = padWidth + gap;
+        var padRow = padHeight + gap;
+
+        ImGui.SetCursorPos(new Vector2(padX + padColumn, padY));
+        if (IconTileButton("TabletUp", UiIcon.ArrowUp, "Up", new Vector2(padWidth, padHeight), true))
+            NudgeScreen(0, moveStep, 0);
+        ImGui.SetCursorPos(new Vector2(padX, padY + padRow));
+        if (IconTileButton("TabletLeft", UiIcon.ArrowLeft, "Left", new Vector2(padWidth, padHeight), true))
+            NudgeLocalHorizontal(-moveStep, 0);
+        ImGui.SetCursorPos(new Vector2(padX + padColumn, padY + padRow));
+        if (IconTileButton("TabletCenter", UiIcon.Monitor, "Center", new Vector2(padWidth, padHeight), false, true))
+            PlaceInFrontOfPlayer();
+        ImGui.SetCursorPos(new Vector2(padX + padColumn * 2f, padY + padRow));
+        if (IconTileButton("TabletRight", UiIcon.ArrowRight, "Right", new Vector2(padWidth, padHeight), true))
+            NudgeLocalHorizontal(moveStep, 0);
+        ImGui.SetCursorPos(new Vector2(padX + padColumn, padY + padRow * 2f));
+        if (IconTileButton("TabletDown", UiIcon.ArrowDown, "Down", new Vector2(padWidth, padHeight), true))
+            NudgeScreen(0, -moveStep, 0);
+
+        var utilityX = padX + padColumn * 3f + 26f;
+        var utilityArea = Math.Max(280f, childWidth - utilityX - 16f);
+        var utilityWidth = Math.Clamp((utilityArea - gap * 3f) / 4f, 64f, 112f);
+        var utilities = new (string Id, UiIcon Icon, string Label, Action Action)[]
+        {
+            ("TabletForward", UiIcon.Forward, "Forward", () => NudgeLocalHorizontal(0, moveStep)),
+            ("TabletBack", UiIcon.Back, "Back", () => NudgeLocalHorizontal(0, -moveStep)),
+            ("TabletRotateL", UiIcon.RotateLeft, "Rotate Left", () => { _screenYawDegreesEdit -= rotationStep; ApplyScreenEdits(); }),
+            ("TabletRotateR", UiIcon.RotateRight, "Rotate Right", () => { _screenYawDegreesEdit += rotationStep; ApplyScreenEdits(); }),
+        };
+
+        for (var i = 0; i < utilities.Length; i++)
+        {
+            ImGui.SetCursorPos(new Vector2(utilityX + i * (utilityWidth + gap), 92f));
+            var utility = utilities[i];
+            if (IconTileButton(utility.Id, utility.Icon, utility.Label, new Vector2(utilityWidth, 68f), true))
+                utility.Action();
+        }
+
+        var actionGap = 12f;
+        var actionWidth = Math.Max(120f, (utilityArea - actionGap) * 0.5f);
+        ImGui.SetCursorPos(new Vector2(utilityX, 176f));
+        if (HorizontalIconButton("TabletPlaceFront", UiIcon.PlaceFront, "Place in Front",
+                new Vector2(actionWidth, 42f), true))
+            PlaceInFrontOfPlayer();
+        ImGui.SetCursorPos(new Vector2(utilityX + actionWidth + actionGap, 176f));
+        if (HorizontalIconButton("TabletResetRotation", UiIcon.Reset, "Reset Rotation",
+                new Vector2(actionWidth, 42f), false))
+            ResetScreenRotation();
+
+        ImGui.EndDisabled();
+        ImGui.SetCursorPos(new Vector2(utilityX, 232f));
+        ImGui.TextDisabled(enabled
+            ? "Shift enables fine movement. Screen changes are shared with viewers."
+            : "Start media from Library to activate shared controls.");
     }
 
     private void DrawScreenControlCard()
@@ -2290,35 +2376,7 @@ internal sealed class PrismCastWindow : Window
 
     private void DrawLibraryHub()
     {
-        if (EffectiveInterfaceMode() == InterfaceMode.Phone)
-        {
-            DrawPhoneLibrary();
-            return;
-        }
-
-        DrawSectionHeading("Media Source", "///");
-        var avail = ImGui.GetContentRegionAvail().X;
-        const float gap = 8f;
-        var width = (avail - gap * 2f) / 3f;
-
-        PushTechButton(_librarySource == LibrarySource.Plex);
-        if (ImGui.Button("PLEX", new Vector2(width, 38))) _librarySource = LibrarySource.Plex;
-        PopTechButton();
-        ImGui.SameLine(0, gap);
-
-        PushTechButton(_librarySource == LibrarySource.LocalFiles);
-        if (ImGui.Button("LOCAL FILES", new Vector2(width, 38))) _librarySource = LibrarySource.LocalFiles;
-        PopTechButton();
-        ImGui.SameLine(0, gap);
-
-        PushTechButton(_librarySource == LibrarySource.Web);
-        if (ImGui.Button("WEB / YOUTUBE", new Vector2(width, 38))) _librarySource = LibrarySource.Web;
-        PopTechButton();
-        ImGui.Spacing();
-
-        if (_librarySource == LibrarySource.Plex) DrawPlexLibrary();
-        else if (_librarySource == LibrarySource.LocalFiles) DrawLocalFiles();
-        else DrawWebMediaLibrary(phone: false);
+        DrawPhoneLibrary();
     }
 
     private void DrawPhoneLibrary()
@@ -2359,7 +2417,7 @@ internal sealed class PrismCastWindow : Window
 
         if (_librarySource == LibrarySource.Web)
         {
-            DrawWebMediaLibrary(phone: true);
+            DrawWebMediaLibrary(phone: EffectiveInterfaceMode() == InterfaceMode.Phone);
             return;
         }
 
@@ -2377,7 +2435,8 @@ internal sealed class PrismCastWindow : Window
 
         if (_selectedPlexDetailsItem is not null)
         {
-            DrawPlexDetailsView(_selectedPlexDetailsItem, phone: true);
+            DrawPlexDetailsView(_selectedPlexDetailsItem,
+                phone: EffectiveInterfaceMode() == InterfaceMode.Phone);
             return;
         }
 
@@ -2457,9 +2516,12 @@ internal sealed class PrismCastWindow : Window
     private void DrawPhoneLibrarySelector(List<PlexLibrary> libraries, int selectedIndex)
     {
         var available = ImGui.GetContentRegionAvail().X;
+        var phone = EffectiveInterfaceMode() == InterfaceMode.Phone;
         const float refreshSize = 42f;
         const float gap = 8f;
         var selectorWidth = Math.Max(220f, available - refreshSize - gap);
+        if (!phone)
+            selectorWidth = Math.Min(540f, selectorWidth);
         const float selectorHeight = 46f;
 
         PlexLibrary? selectedLibrary = null;
@@ -3379,10 +3441,13 @@ internal sealed class PrismCastWindow : Window
 
     private void DrawPhonePlexTileGrid(List<PlexItem> items)
     {
-        const int columns = 3;
-        const float sidePadding = 10f;
-        const float gap = 9f;
+        var phone = EffectiveInterfaceMode() == InterfaceMode.Phone;
         var available = Math.Max(300f, ImGui.GetContentRegionAvail().X);
+        var columns = phone
+            ? 3
+            : Math.Clamp((int)((available + 9f) / 168f), 4, 7);
+        var sidePadding = phone ? 10f : 14f;
+        const float gap = 9f;
         var cardWidth = (available - sidePadding * 2f - gap * (columns - 1)) / columns;
         var posterWidth = Math.Max(88f, cardWidth - 10f);
         var posterHeight = posterWidth * 1.46f;
@@ -3827,74 +3892,26 @@ internal sealed class PrismCastWindow : Window
 
     private void DrawTabletSession()
     {
-        // Keep the existing tablet behavior for now, but do not include What's New here.
-        if (_session.Mode == PrismMode.Hosting)
+        DrawSectionHeading("Watch Together", "// SESSION");
+        ImGui.Spacing();
+        MaybeRefreshGroupStatuses();
+
+        var available = ImGui.GetContentRegionAvail();
+        const float gap = 12f;
+        var leftWidth = Math.Clamp((available.X - gap) * 0.44f, 310f, 430f);
+
+        if (ImGui.BeginChild("##TabletSessionActions", new Vector2(leftWidth, available.Y), false))
         {
-            ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.050f, 0.055f, 0.100f, 0.99f));
-            if (ImGui.BeginChild("##HostSessionOverview", new Vector2(0, 300), true))
-            {
-                DrawTechFrame();
-                DrawSectionHeading("Your Session Code", "// SHARE");
-                var code = _session.InviteCode;
-                ImGui.PushStyleColor(ImGuiCol.Text, AccentHover);
-                var size = ImGui.CalcTextSize(code);
-                ImGui.SetCursorPosX(Math.Max(0, (ImGui.GetContentRegionAvail().X - size.X) * 0.5f));
-                ImGui.TextUnformatted(code);
-                ImGui.PopStyleColor();
-                if (ImGui.Button("COPY SESSION CODE", new Vector2(-1, 34))) ImGui.SetClipboardText(code);
-                ImGui.Spacing();
-                var viewers = ViewerPresenceRegistry.GetViewerNames();
-                DrawSectionHeading($"Players ({viewers.Count + 1})", "// ACTIVE");
-                ImGui.TextUnformatted($"HOST   {LocalFirstName()}");
-                foreach (var firstName in viewers.Take(8))
-                {
-                    ImGui.Separator();
-                    ImGui.TextUnformatted($"●  {firstName}");
-                    ImGui.SameLine(Math.Max(ImGui.GetCursorPosX() + 20f, ImGui.GetWindowWidth() - 92f));
-                    ImGui.PushStyleColor(ImGuiCol.Text, Good);
-                    ImGui.TextUnformatted("WATCHING");
-                    ImGui.PopStyleColor();
-                }
-            }
-            ImGui.EndChild();
-            ImGui.PopStyleColor();
+            DrawPhoneHostSessionContainer();
+            ImGui.Spacing();
+            DrawPhoneJoinSessionContainer();
         }
-        else if (_session.Mode == PrismMode.Viewing)
-        {
-            ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.050f, 0.055f, 0.100f, 0.99f));
-            if (ImGui.BeginChild("##ViewingOverview", new Vector2(0, 220), true))
-            {
-                DrawTechFrame(S9Cyan);
-                DrawSectionHeading("Connected", "// REMOTE SESSION");
-                ImGui.TextWrapped(_session.ViewerState?.Title ?? "PrismCast session");
-                ImGui.TextDisabled("Playback and screen placement are host controlled.");
-                ImGui.Spacing();
-                if (ImGui.Button("OPEN REMOTE", new Vector2(160, 34))) SelectPage(Page.RemoteControl);
-                ImGui.SameLine();
-                if (ImGui.Button("LEAVE SESSION", new Vector2(150, 34))) RunUiTask(StopSessionFromUiAsync);
-            }
-            ImGui.EndChild();
-            ImGui.PopStyleColor();
-        }
-        else
-        {
-            ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.050f, 0.055f, 0.100f, 0.99f));
-            if (ImGui.BeginChild("##JoinCard", new Vector2(0, 250), true))
-            {
-                DrawTechFrame();
-                DrawSectionHeading("Join A Session", "///");
-                ImGui.TextWrapped("Enter the direct PrismCast lobby code supplied by the host.");
-                ImGui.Spacing();
-                ImGui.SetNextItemWidth(-1);
-                ImGui.InputText("##JoinCode", ref _invite, 4096);
-                PushTechButton();
-                if (ImGui.Button("JOIN SESSION", new Vector2(-1, 38)))
-                    BeginDirectLobbyJoin(_invite);
-                PopTechButton();
-            }
-            ImGui.EndChild();
-            ImGui.PopStyleColor();
-        }
+        ImGui.EndChild();
+
+        ImGui.SameLine(0, gap);
+        if (ImGui.BeginChild("##TabletSessionGroups", new Vector2(0, available.Y), false))
+            DrawPhoneGroupsContainer();
+        ImGui.EndChild();
     }
 
     private void BeginDirectLobbyJoin(string rawCode)
@@ -5434,44 +5451,19 @@ internal sealed class PrismCastWindow : Window
 
     private void DrawSettings()
     {
-        var phone = EffectiveInterfaceMode() == InterfaceMode.Phone;
-        var available = ImGui.GetContentRegionAvail();
-        if (phone)
+        if (_phoneSettingsHome)
         {
-            if (_phoneSettingsHome)
-            {
-                DrawSectionHeading("Settings", "// CONTROL PANEL");
-                ImGui.Spacing();
-                DrawPhoneSettingsHub();
-                return;
-            }
-
-            DrawPhoneSettingsPageHeader();
+            var phone = EffectiveInterfaceMode() == InterfaceMode.Phone;
+            DrawSectionHeading(phone ? "Settings" : "Control Panel", phone ? "// CONTROL PANEL" : "// SETTINGS");
             ImGui.Spacing();
-            if (ImGui.BeginChild("##PhoneSettingsContent", new Vector2(0, Math.Max(1f, ImGui.GetContentRegionAvail().Y)), false))
-                DrawSettingsContent();
-            ImGui.EndChild();
+            DrawPhoneSettingsHub();
             return;
         }
 
-        var settingsNavWidth = 160f;
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, SidebarBg);
-        if (ImGui.BeginChild("##SettingsNav", new Vector2(settingsNavWidth, available.Y), true))
-        {
-            DrawTechFrame(S9Blue);
-            SettingsButton(SettingsPage.General, "GENERAL");
-            SettingsButton(SettingsPage.Plex, "PLEX");
-            SettingsButton(SettingsPage.LocalMedia, "LOCAL MEDIA");
-            SettingsButton(SettingsPage.Playback, "PLAYBACK");
-            SettingsButton(SettingsPage.Screen, "SCREEN");
-            SettingsButton(SettingsPage.Networking, "NETWORKING");
-            SettingsButton(SettingsPage.Advanced, "ADVANCED");
-            SettingsButton(SettingsPage.About, "ABOUT");
-        }
-        ImGui.EndChild();
-        ImGui.PopStyleColor();
-        ImGui.SameLine(0, 10f);
-        if (ImGui.BeginChild("##SettingsContent", new Vector2(0, available.Y), false))
+        DrawPhoneSettingsPageHeader();
+        ImGui.Spacing();
+        if (ImGui.BeginChild("##ResponsiveSettingsContent",
+                new Vector2(0, Math.Max(1f, ImGui.GetContentRegionAvail().Y)), false))
             DrawSettingsContent();
         ImGui.EndChild();
     }
@@ -5479,9 +5471,13 @@ internal sealed class PrismCastWindow : Window
     private void DrawPhoneSettingsHub()
     {
         var width = ImGui.GetContentRegionAvail().X;
+        var phone = EffectiveInterfaceMode() == InterfaceMode.Phone;
         const float gap = 9f;
-        var tile = Math.Clamp((width - gap * 2f) / 3f, 96f, 132f);
-        var total = tile * 3f + gap * 2f;
+        var columns = phone ? 3 : 4;
+        var tile = phone
+            ? Math.Clamp((width - gap * (columns - 1)) / columns, 96f, 132f)
+            : Math.Clamp((width - gap * (columns - 1)) / columns, 120f, 174f);
+        var total = tile * columns + gap * (columns - 1);
         var left = Math.Max(0f, (width - total) * 0.5f);
 
         var items = new (SettingsPage Page, string Title, string Subtitle, UiIcon Icon)[]
@@ -5498,7 +5494,7 @@ internal sealed class PrismCastWindow : Window
 
         for (var i = 0; i < items.Length; i++)
         {
-            if (i % 3 == 0)
+            if (i % columns == 0)
                 ImGui.SetCursorPosX(left);
             else
                 ImGui.SameLine(0, gap);
