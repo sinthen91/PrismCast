@@ -93,6 +93,8 @@ internal sealed class PrismCastWindow : Window
         Link,
         Search,
         Play,
+        Pause,
+        Power,
         Ticket,
         Crown,
         Copy,
@@ -592,29 +594,17 @@ internal sealed class PrismCastWindow : Window
         var size = ImGui.GetWindowSize();
         var draw = ImGui.GetWindowDrawList();
         draw.AddRectFilled(pos, pos + size, ImGui.ColorConvertFloat4ToU32(DeviceShell), 17f);
-        draw.AddRect(pos + Vector2.One, pos + size - Vector2.One, ImGui.ColorConvertFloat4ToU32(DeviceBorder), 17f, ImDrawFlags.None, 2f);
-        draw.AddLine(pos + new Vector2(8, 2), pos + new Vector2(54, 2), U32(AccentHover), 2f);
-        draw.AddLine(pos + size - new Vector2(8, 2), pos + size - new Vector2(54, 2), U32(S9Cyan), 2f);
 
-        // Portrait pocket-remote layout inspired by the compact Aetherphone remote:
-        // branding at the top, artwork/status in the center, minimal transport and
-        // screen controls, and a dedicated power control at the bottom.
-        ImGui.SetCursorPos(new Vector2(12, 10));
-        ImGui.PushStyleColor(ImGuiCol.Text, AccentHover);
-        ImGui.TextUnformatted("◆");
-        ImGui.PopStyleColor();
-        ImGui.SameLine(0, 5f);
-        if (ImGui.Button("PrismCast##MiniExpand", new Vector2(92, 25)))
+        if (DrawMiniExpandButton(_session.Mode == PrismMode.Idle ? MiniIdleSize.X : MiniActiveSize.X))
             SetMinimized(false);
 
         if (_session.Mode == PrismMode.Idle)
         {
             DrawMiniIdleLogo();
             ImGui.SetCursorPos(new Vector2(18, MiniIdleSize.Y - 55f));
-            PushDangerButton();
-            if (ImGui.Button("PWR##MiniIdle", new Vector2(MiniIdleSize.X - 36f, 36)))
+            if (DrawMiniPowerButton("MiniIdlePower", new Vector2(MiniIdleSize.X - 36f, 36f)))
                 IsOpen = false;
-            PopDangerButton();
+            DrawMiniNeonBorder(pos, size);
             return;
         }
 
@@ -623,29 +613,28 @@ internal sealed class PrismCastWindow : Window
         DrawMiniArtwork();
 
         var titleWidth = totalWidth - 28f;
-        ImGui.SetCursorPos(new Vector2(CenterMini(totalWidth, titleWidth), 181));
-        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + titleWidth);
-        ImGui.TextWrapped(TrimForDisplay(CurrentMediaTitle(), 34));
-        ImGui.PopTextWrapPos();
+        ImGui.SetCursorPos(new Vector2(CenterMini(totalWidth, titleWidth), 181f));
+        DrawMiniMarqueeText(CurrentMediaTitle(), titleWidth, 24f);
 
         if (_session.Mode == PrismMode.Hosting)
         {
-            const float smallButton = 43f;
-            const float playButton = 50f;
-            const float gap = 5f;
-            const float dpadButton = 38f;
-            const float row4Button = 38f;
-            const float topY = 236f;
+            const float smallButton = 40f;
+            const float playButton = 48f;
+            const float gap = 8f;
+            const float dpadButton = 40f;
+            const float row4Button = 40f;
+            const float topY = 226f;
 
             var transportWidth = smallButton + gap + playButton + gap + smallButton;
             ImGui.SetCursorPos(new Vector2(CenterMini(totalWidth, transportWidth), topY));
-            if (ImGui.Button("-10##Mini", new Vector2(smallButton, 29)))
+            if (CircleTechButton("MiniSeekBack", "-10", smallButton))
                 _session.SeekHost(Math.Max(0, info.PositionSeconds - 10));
             ImGui.SameLine(0, gap);
-            if (ImGui.Button(info.Paused ? "▶##MiniPlay" : "Ⅱ##MiniPause", new Vector2(playButton, 29)))
+            var mediaIcon = info.Paused ? _playIconPath : _pauseIconPath;
+            if (CircleMediaButton("MiniPlayPause", mediaIcon, playButton, true))
                 _session.PauseHost(!info.Paused);
             ImGui.SameLine(0, gap);
-            if (ImGui.Button("+10##Mini", new Vector2(smallButton, 29)))
+            if (CircleTechButton("MiniSeekForward", "+10", smallButton))
                 _session.SeekHost(info.PositionSeconds + 10);
 
             var moveStep = CurrentMovementStep();
@@ -654,26 +643,41 @@ internal sealed class PrismCastWindow : Window
             var dpadX = CenterMini(totalWidth, dpadWidth);
             var dpadCenterX = CenterMini(totalWidth, dpadButton);
 
-            ImGui.SetCursorPos(new Vector2(dpadCenterX, 276));
-            if (RepeatButton("↑", "MiniUp", new Vector2(dpadButton, 28))) NudgeScreen(0, moveStep, 0);
-            ImGui.SetCursorPos(new Vector2(dpadX, 309));
-            if (RepeatButton("←", "MiniLeft", new Vector2(dpadButton, 28))) NudgeLocalHorizontal(-moveStep, 0);
+            ImGui.SetCursorPos(new Vector2(dpadCenterX, 284f));
+            if (DrawMiniIconButton("MiniUp", UiIcon.ArrowUp, new Vector2(dpadButton, 32f), repeat: true))
+                NudgeScreen(0, moveStep, 0);
+            ImGui.SetCursorPos(new Vector2(dpadX, 322f));
+            if (DrawMiniIconButton("MiniLeft", UiIcon.ArrowLeft, new Vector2(dpadButton, 32f), repeat: true))
+                NudgeLocalHorizontal(-moveStep, 0);
             ImGui.SameLine(0, gap);
-            if (ImGui.Button("◎##MiniCenter", new Vector2(dpadButton, 28))) PlaceInFrontOfPlayer();
+            if (DrawMiniIconButton("MiniCenter", UiIcon.Monitor, new Vector2(dpadButton, 32f), active: true))
+                PlaceInFrontOfPlayer();
             ImGui.SameLine(0, gap);
-            if (RepeatButton("→", "MiniRight", new Vector2(dpadButton, 28))) NudgeLocalHorizontal(moveStep, 0);
-            ImGui.SetCursorPos(new Vector2(dpadCenterX, 342));
-            if (RepeatButton("↓", "MiniDown", new Vector2(dpadButton, 28))) NudgeScreen(0, -moveStep, 0);
+            if (DrawMiniIconButton("MiniRight", UiIcon.ArrowRight, new Vector2(dpadButton, 32f), repeat: true))
+                NudgeLocalHorizontal(moveStep, 0);
+            ImGui.SetCursorPos(new Vector2(dpadCenterX, 360f));
+            if (DrawMiniIconButton("MiniDown", UiIcon.ArrowDown, new Vector2(dpadButton, 32f), repeat: true))
+                NudgeScreen(0, -moveStep, 0);
 
             var actionRowWidth = row4Button * 4f + gap * 3f;
-            ImGui.SetCursorPos(new Vector2(CenterMini(totalWidth, actionRowWidth), 379));
-            if (RepeatButton("F", "MiniForward", new Vector2(row4Button, 27))) NudgeLocalHorizontal(0, moveStep);
+            ImGui.SetCursorPos(new Vector2(CenterMini(totalWidth, actionRowWidth), 406f));
+            if (DrawMiniIconButton("MiniForward", UiIcon.Forward, new Vector2(row4Button, 32f), repeat: true))
+                NudgeLocalHorizontal(0, moveStep);
             ImGui.SameLine(0, gap);
-            if (RepeatButton("↺", "MiniRotateLeft", new Vector2(row4Button, 27))) { _screenYawDegreesEdit -= rot; ApplyScreenEdits(); }
+            if (DrawMiniIconButton("MiniRotateLeft", UiIcon.RotateLeft, new Vector2(row4Button, 32f), repeat: true))
+            {
+                _screenYawDegreesEdit -= rot;
+                ApplyScreenEdits();
+            }
             ImGui.SameLine(0, gap);
-            if (RepeatButton("↻", "MiniRotateRight", new Vector2(row4Button, 27))) { _screenYawDegreesEdit += rot; ApplyScreenEdits(); }
+            if (DrawMiniIconButton("MiniRotateRight", UiIcon.RotateRight, new Vector2(row4Button, 32f), repeat: true))
+            {
+                _screenYawDegreesEdit += rot;
+                ApplyScreenEdits();
+            }
             ImGui.SameLine(0, gap);
-            if (RepeatButton("B", "MiniBack", new Vector2(row4Button, 27))) NudgeLocalHorizontal(0, -moveStep);
+            if (DrawMiniIconButton("MiniBack", UiIcon.Back, new Vector2(row4Button, 32f), repeat: true))
+                NudgeLocalHorizontal(0, -moveStep);
         }
         else
         {
@@ -686,10 +690,101 @@ internal sealed class PrismCastWindow : Window
         }
 
         ImGui.SetCursorPos(new Vector2(18, MiniActiveSize.Y - 52f));
-        PushDangerButton();
-        if (ImGui.Button("PWR##MiniActive", new Vector2(MiniActiveSize.X - 36f, 34)))
+        if (DrawMiniPowerButton("MiniActivePower", new Vector2(MiniActiveSize.X - 36f, 34f)))
             RunUiTask(StopSessionFromUiAsync);
-        PopDangerButton();
+        DrawMiniNeonBorder(pos, size);
+    }
+
+    private bool DrawMiniExpandButton(float totalWidth)
+    {
+        ImGui.SetCursorPos(new Vector2(12f, 9f));
+        var origin = ImGui.GetCursorScreenPos();
+        var size = new Vector2(totalWidth - 24f, 28f);
+        var pressed = ImGui.InvisibleButton("##MiniExpand", size);
+        var hovered = ImGui.IsItemHovered();
+        var draw = ImGui.GetWindowDrawList();
+        draw.AddRectFilled(origin, origin + size,
+            U32(hovered ? new Vector4(0.17f, 0.09f, 0.29f, 1f) : new Vector4(0.07f, 0.06f, 0.13f, 0.98f)), 8f);
+        draw.AddRect(origin, origin + size, U32(hovered ? AccentHover : new Vector4(Accent.X, Accent.Y, Accent.Z, 0.55f)),
+            8f, ImDrawFlags.None, 1.2f);
+        DrawPrismGlyph(origin + new Vector2(15f, size.Y * 0.5f), 7f);
+        var label = "PrismCast";
+        var textSize = ImGui.CalcTextSize(label);
+        draw.AddText(new Vector2(origin.X + 29f, origin.Y + (size.Y - textSize.Y) * 0.5f), U32(Vector4.One), label);
+        return pressed;
+    }
+
+    private bool DrawMiniIconButton(string id, UiIcon icon, Vector2 size, bool repeat = false, bool active = false)
+    {
+        var origin = ImGui.GetCursorScreenPos();
+        ImGui.InvisibleButton($"##{id}", size);
+        var pressed = repeat ? RepeatCurrentInvisible(id) : ImGui.IsItemClicked();
+        var hovered = ImGui.IsItemHovered();
+        var held = ImGui.IsItemActive();
+        var draw = ImGui.GetWindowDrawList();
+        var fill = active
+            ? new Vector4(0.28f, 0.11f, 0.48f, 0.98f)
+            : new Vector4(0.055f, 0.065f, 0.125f, 0.98f);
+        if (hovered)
+            fill = active ? new Vector4(0.40f, 0.16f, 0.66f, 1f) : new Vector4(0.10f, 0.12f, 0.22f, 1f);
+        draw.AddRectFilled(origin, origin + size, U32(fill), 7f);
+        draw.AddRect(origin, origin + size, U32(active || held ? AccentHover : S9Blue), 7f,
+            ImDrawFlags.None, active ? 1.8f : 1.2f);
+        DrawUiIcon(icon, origin + size * 0.5f, 18f, active ? Vector4.One : new Vector4(0.82f, 0.84f, 1f, 1f), 2f);
+        return pressed;
+    }
+
+    private bool DrawMiniPowerButton(string id, Vector2 size)
+    {
+        var origin = ImGui.GetCursorScreenPos();
+        var pressed = ImGui.InvisibleButton($"##{id}", size);
+        var hovered = ImGui.IsItemHovered();
+        var draw = ImGui.GetWindowDrawList();
+        var fill = hovered ? new Vector4(0.36f, 0.11f, 0.52f, 1f) : new Vector4(0.20f, 0.065f, 0.31f, 0.98f);
+        draw.AddRectFilled(origin, origin + size, U32(fill), 8f);
+        draw.AddRect(origin, origin + size, U32(hovered ? AccentHover : new Vector4(Accent.X, Accent.Y, Accent.Z, 0.85f)),
+            8f, ImDrawFlags.None, 1.5f);
+        DrawUiIcon(UiIcon.Power, origin + new Vector2(22f, size.Y * 0.5f), 18f, Vector4.One, 2f);
+        var label = "POWER";
+        var textSize = ImGui.CalcTextSize(label);
+        draw.AddText(new Vector2(origin.X + (size.X - textSize.X) * 0.5f + 8f,
+            origin.Y + (size.Y - textSize.Y) * 0.5f), U32(Vector4.One), label);
+        return pressed;
+    }
+
+    private static void DrawMiniMarqueeText(string text, float width, float height)
+    {
+        var shown = string.IsNullOrWhiteSpace(text) ? "Nothing playing" : text.Trim();
+        var origin = ImGui.GetCursorScreenPos();
+        var draw = ImGui.GetWindowDrawList();
+        var textSize = ImGui.CalcTextSize(shown);
+        var textY = origin.Y + Math.Max(0f, (height - textSize.Y) * 0.5f);
+        draw.PushClipRect(origin, origin + new Vector2(width, height), true);
+        if (textSize.X <= width)
+        {
+            draw.AddText(new Vector2(origin.X + (width - textSize.X) * 0.5f, textY), U32(Vector4.One), shown);
+        }
+        else
+        {
+            const float gap = 42f;
+            var cycle = textSize.X + gap;
+            var offset = (float)(ImGui.GetTime() * 28d % cycle);
+            draw.AddText(new Vector2(origin.X - offset, textY), U32(Vector4.One), shown);
+            draw.AddText(new Vector2(origin.X + cycle - offset, textY), U32(Vector4.One), shown);
+        }
+        draw.PopClipRect();
+        ImGui.Dummy(new Vector2(width, height));
+    }
+
+    private static void DrawMiniNeonBorder(Vector2 position, Vector2 size)
+    {
+        var overlay = ImGui.GetForegroundDrawList();
+        overlay.AddRect(position + new Vector2(1.5f), position + size - new Vector2(1.5f),
+            U32(new Vector4(0.48f, 0.10f, 0.95f, 0.16f)), 18f, ImDrawFlags.None, 8f);
+        overlay.AddRect(position + new Vector2(3.5f), position + size - new Vector2(3.5f),
+            U32(new Vector4(0.64f, 0.28f, 1.00f, 0.78f)), 16f, ImDrawFlags.None, 3f);
+        overlay.AddRect(position + new Vector2(5.5f), position + size - new Vector2(5.5f),
+            U32(new Vector4(0.30f, 0.82f, 1.00f, 0.58f)), 14f, ImDrawFlags.None, 1.2f);
     }
 
     private void DrawMiniIdleLogo()
@@ -944,6 +1039,18 @@ internal sealed class PrismCastWindow : Window
                 draw.AddTriangleFilled(p1, p2, p3, c);
                 break;
             }
+            case UiIcon.Pause:
+                draw.AddRectFilled(center + new Vector2(-h * 0.56f, -h * 0.66f),
+                    center + new Vector2(-h * 0.14f, h * 0.66f), c, 1f);
+                draw.AddRectFilled(center + new Vector2(h * 0.14f, -h * 0.66f),
+                    center + new Vector2(h * 0.56f, h * 0.66f), c, 1f);
+                break;
+            case UiIcon.Power:
+                DrawArc(draw, center + new Vector2(0, h * 0.10f), h * 0.72f,
+                    -0.72f, MathF.PI * 2f - 0.72f - 0.90f, 24, color, thickness);
+                draw.AddLine(center + new Vector2(0, -h * 0.92f),
+                    center + new Vector2(0, h * 0.05f), c, thickness + 0.5f);
+                break;
             case UiIcon.Ticket:
             {
                 var min = center - new Vector2(h * 0.92f, h * 0.58f);
@@ -1200,12 +1307,13 @@ internal sealed class PrismCastWindow : Window
         ImGui.EndChild();
         ImGui.PopStyleVar();
 
-        // Top-layer shell cap: draw a masking rim and then re-draw the neon tube so any
-        // square corner bleed from child windows is hidden under the rounded device edge.
+        // Draw the final shell cap on the foreground layer so child-window corners can
+        // never cover the rounded neon rim.
+        var overlay = ImGui.GetForegroundDrawList();
         var capMin = windowPos + new Vector2(10.5f, 10.5f);
         var capMax = windowPos + windowSize - new Vector2(10.5f, 10.5f);
-        draw.AddRect(capMin, capMax, shellColor, 23f, ImDrawFlags.None, 9.0f);
-        draw.AddRect(capMin + new Vector2(1.5f, 1.5f), capMax - new Vector2(1.5f, 1.5f), U32(new Vector4(0.035f, 0.040f, 0.075f, 0.95f)), 21f, ImDrawFlags.None, 3.0f);
+        overlay.AddRect(capMin, capMax, shellColor, 23f, ImDrawFlags.None, 9.0f);
+        overlay.AddRect(capMin + new Vector2(1.5f, 1.5f), capMax - new Vector2(1.5f, 1.5f), U32(new Vector4(0.035f, 0.040f, 0.075f, 0.95f)), 21f, ImDrawFlags.None, 3.0f);
 
         var overlayGlow = new[]
         {
@@ -1216,10 +1324,10 @@ internal sealed class PrismCastWindow : Window
         {
             var min = windowPos + new Vector2(layer.inset, layer.inset);
             var max = windowPos + windowSize - new Vector2(layer.inset, layer.inset);
-            draw.AddRect(min, max, U32(layer.color), layer.rounding, ImDrawFlags.None, layer.thickness);
+            overlay.AddRect(min, max, U32(layer.color), layer.rounding, ImDrawFlags.None, layer.thickness);
         }
-        draw.AddRect(windowPos + new Vector2(7f, 7f), windowPos + windowSize - new Vector2(7f, 7f), U32(new Vector4(0.86f, 0.58f, 1.00f, 0.96f)), 24f, ImDrawFlags.None, 3.2f);
-        draw.AddRect(windowPos + new Vector2(9.5f, 9.5f), windowPos + windowSize - new Vector2(9.5f, 9.5f), U32(new Vector4(0.24f, 0.88f, 1.00f, 0.72f)), 22f, ImDrawFlags.None, 1.3f);
+        overlay.AddRect(windowPos + new Vector2(7f, 7f), windowPos + windowSize - new Vector2(7f, 7f), U32(new Vector4(0.86f, 0.58f, 1.00f, 0.96f)), 24f, ImDrawFlags.None, 3.2f);
+        overlay.AddRect(windowPos + new Vector2(9.5f, 9.5f), windowPos + windowSize - new Vector2(9.5f, 9.5f), U32(new Vector4(0.24f, 0.88f, 1.00f, 0.72f)), 22f, ImDrawFlags.None, 1.3f);
 
         ImGui.PopStyleColor();
     }
@@ -1435,20 +1543,11 @@ internal sealed class PrismCastWindow : Window
         ImGui.PushStyleColor(ImGuiCol.ChildBg, HeaderBg);
         if (ImGui.BeginChild("##DeviceHeader", new Vector2(0, DeviceHeaderHeight), false))
         {
-            var isPhone = EffectiveInterfaceMode() == InterfaceMode.Phone;
             var w = ImGui.GetWindowWidth();
             var draw = ImGui.GetWindowDrawList();
             var origin = ImGui.GetWindowPos();
             draw.AddLine(origin + new Vector2(12, DeviceHeaderHeight - 1), origin + new Vector2(w - 12, DeviceHeaderHeight - 1), U32(new Vector4(S9Blue.X, S9Blue.Y, S9Blue.Z, 0.35f)), 1f);
             draw.AddLine(origin + new Vector2(12, DeviceHeaderHeight - 1), origin + new Vector2(90, DeviceHeaderHeight - 1), U32(Accent), 2f);
-
-            ImGui.SetCursorPos(new Vector2(8f, 1f));
-            if (!DrawUiAsset(_logoAssetPath, new Vector2(136f, 44f)))
-            {
-                DrawPrismGlyph(origin + new Vector2(22, DeviceHeaderHeight * 0.5f), 10f);
-                ImGui.SetCursorPos(new Vector2(39, 10));
-                ImGui.TextUnformatted("PrismCast");
-            }
 
             var status = _session.Mode switch
             {
@@ -1457,47 +1556,81 @@ internal sealed class PrismCastWindow : Window
                 _ => "READY"
             };
             var statusColor = _session.Mode == PrismMode.Idle ? Muted : Good;
-            const float b = 30f;
-            var buttonCount = isPhone ? 4 : _session.Mode == PrismMode.Hosting ? 3 : 2;
-            var startButtons = w - (b * buttonCount) - (2f * (buttonCount - 1)) - 10f;
+            const float buttonWidth = 42f;
+            const float buttonHeight = 34f;
+            const float gap = 7f;
+            var buttonCount = _session.Mode == PrismMode.Hosting ? 3 : 2;
+            var controlsWidth = buttonWidth * buttonCount + gap * (buttonCount - 1);
+            var controlsX = w - controlsWidth - 10f;
+            var statusText = $"● {status}";
+            var statusWidth = ImGui.CalcTextSize(statusText).X;
+            ImGui.SetCursorPos(new Vector2(Math.Max(12f, controlsX - statusWidth - 20f), 15f));
+            ImGui.PushStyleColor(ImGuiCol.Text, statusColor);
+            ImGui.TextUnformatted(statusText);
+            ImGui.PopStyleColor();
 
-            if (!isPhone)
+            var nextX = controlsX;
+            if (_session.Mode == PrismMode.Hosting)
             {
-                var sw = ImGui.CalcTextSize(status).X;
-                ImGui.SameLine(Math.Max(ImGui.GetCursorPosX() + 20f, startButtons - sw - 26f));
-                ImGui.PushStyleColor(ImGuiCol.Text, statusColor);
-                ImGui.TextUnformatted($"● {status}");
-                ImGui.PopStyleColor();
-            }
-
-            ImGui.SetCursorPos(new Vector2(startButtons, 8));
-            ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
-            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(Accent.X, Accent.Y, Accent.Z, 0.22f));
-            if (isPhone)
-            {
-                if (ImGui.Button("N##OpenChangelog", new Vector2(b, 28))) SelectPage(Page.Changelog);
-                ImGui.SameLine(0, 2f);
-                if (ImGui.Button("S##OpenSettings", new Vector2(b, 28))) SelectPage(Page.Settings);
-                ImGui.SameLine(0, 2f);
-            }
-            else if (_session.Mode == PrismMode.Hosting)
-            {
-                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.34f, 0.07f, 0.12f, 0.98f));
-                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.66f, 0.12f, 0.20f, 1f));
-                if (ImGui.Button("■##StopTabletSession", new Vector2(b, 28)))
+                if (DrawTabletHeaderButton("StopTabletSession", new Vector2(nextX, 5f),
+                        new Vector2(buttonWidth, buttonHeight), HeaderButtonIcon.Stop))
                     RunUiTask(StopSessionFromUiAsync);
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("Stop Session");
-                ImGui.PopStyleColor(2);
-                ImGui.SameLine(0, 2f);
+                nextX += buttonWidth + gap;
             }
-            if (ImGui.Button("–##MinimizePrism", new Vector2(b, 28))) SetMinimized(true);
-            ImGui.SameLine(0, 2f);
-            if (ImGui.Button("×##ClosePrism", new Vector2(b, 28))) IsOpen = false;
-            ImGui.PopStyleColor(2);
+            if (DrawTabletHeaderButton("MinimizePrism", new Vector2(nextX, 5f),
+                    new Vector2(buttonWidth, buttonHeight), HeaderButtonIcon.Minimize))
+                SetMinimized(true);
+            nextX += buttonWidth + gap;
+            if (DrawTabletHeaderButton("ClosePrism", new Vector2(nextX, 5f),
+                    new Vector2(buttonWidth, buttonHeight), HeaderButtonIcon.Close))
+                IsOpen = false;
         }
         ImGui.EndChild();
         ImGui.PopStyleColor();
+    }
+
+    private enum HeaderButtonIcon
+    {
+        Stop,
+        Minimize,
+        Close,
+    }
+
+    private static bool DrawTabletHeaderButton(string id, Vector2 position, Vector2 size, HeaderButtonIcon icon)
+    {
+        ImGui.SetCursorPos(position);
+        var origin = ImGui.GetCursorScreenPos();
+        var pressed = ImGui.InvisibleButton($"##{id}", size);
+        var hovered = ImGui.IsItemHovered();
+        var danger = icon is HeaderButtonIcon.Stop or HeaderButtonIcon.Close;
+        var fill = danger
+            ? hovered ? new Vector4(0.62f, 0.10f, 0.20f, 1f) : new Vector4(0.32f, 0.055f, 0.13f, 0.98f)
+            : hovered ? new Vector4(0.10f, 0.19f, 0.34f, 1f) : new Vector4(0.055f, 0.085f, 0.15f, 0.98f);
+        var border = danger
+            ? hovered ? new Vector4(1f, 0.43f, 0.50f, 1f) : new Vector4(0.88f, 0.26f, 0.34f, 0.90f)
+            : hovered ? S9Cyan : new Vector4(S9Blue.X, S9Blue.Y, S9Blue.Z, 0.72f);
+        var draw = ImGui.GetWindowDrawList();
+        var max = origin + size;
+        var center = origin + size * 0.5f;
+        draw.AddRectFilled(origin, max, U32(fill), 8f);
+        draw.AddRect(origin, max, U32(border), 8f, ImDrawFlags.None, 1.5f);
+
+        switch (icon)
+        {
+            case HeaderButtonIcon.Stop:
+                draw.AddRectFilled(center - new Vector2(5f), center + new Vector2(5f), U32(Vector4.One), 1.5f);
+                break;
+            case HeaderButtonIcon.Minimize:
+                draw.AddLine(center + new Vector2(-9f, 4f), center + new Vector2(9f, 4f), U32(Vector4.One), 2.8f);
+                break;
+            case HeaderButtonIcon.Close:
+                draw.AddLine(center + new Vector2(-7f, -7f), center + new Vector2(7f, 7f), U32(Vector4.One), 2.6f);
+                draw.AddLine(center + new Vector2(7f, -7f), center + new Vector2(-7f, 7f), U32(Vector4.One), 2.6f);
+                break;
+        }
+        return pressed;
     }
 
     private void DrawPhoneBottomNav()
@@ -1547,16 +1680,17 @@ internal sealed class PrismCastWindow : Window
 
     private void DrawSidebar()
     {
-        ImGui.Dummy(new Vector2(1, 10));
-        var p = ImGui.GetWindowPos();
-        DrawPrismGlyph(p + new Vector2(22, 27), 10f);
-        ImGui.SetCursorPosX(40);
-        ImGui.PushStyleColor(ImGuiCol.Text, AccentHover);
-        ImGui.TextUnformatted("PRISMCAST");
-        ImGui.PopStyleColor();
-        ImGui.SetCursorPosX(40);
-        ImGui.TextDisabled("S9 MEDIA NETWORK");
-        ImGui.Dummy(new Vector2(1, 18));
+        ImGui.SetCursorPos(new Vector2(10f, 8f));
+        if (!DrawUiAsset(_logoAssetPath, new Vector2(SidebarWidth - 20f, 61f)))
+        {
+            var p = ImGui.GetWindowPos();
+            DrawPrismGlyph(p + new Vector2(24f, 36f), 11f);
+            ImGui.SetCursorPos(new Vector2(44f, 27f));
+            ImGui.PushStyleColor(ImGuiCol.Text, AccentHover);
+            ImGui.TextUnformatted("PRISMCAST");
+            ImGui.PopStyleColor();
+        }
+        ImGui.SetCursorPosY(82f);
 
         SidebarButton(Page.RemoteControl, "REMOTE");
         SidebarButton(Page.PlexLibrary, "LIBRARY");
@@ -1566,17 +1700,6 @@ internal sealed class PrismCastWindow : Window
         ImGui.Separator();
         ImGui.Dummy(new Vector2(1, 8));
         SidebarButton(Page.Settings, "SETTINGS");
-
-        var changelogY = ImGui.GetWindowHeight() - 244f;
-        if (ImGui.GetCursorPosY() < changelogY)
-            ImGui.SetCursorPosY(changelogY);
-
-        ImGui.Separator();
-        ImGui.Dummy(new Vector2(1, 7));
-        DrawSidebarChangelog();
-        ImGui.Separator();
-        ImGui.Dummy(new Vector2(1, 8));
-        DrawSidebarSessionState();
     }
 
     private void SidebarButton(Page page, string label)
@@ -1586,48 +1709,6 @@ internal sealed class PrismCastWindow : Window
         if (ImGui.Button(label, new Vector2(-1, 38)))
             SelectPage(page);
         PopTechButton();
-    }
-
-    private void DrawSidebarChangelog()
-    {
-        ImGui.PushStyleColor(ImGuiCol.Text, Accent);
-        ImGui.TextUnformatted("CHANGELOG");
-        ImGui.PopStyleColor();
-
-        for (var i = 0; i < Math.Min(3, RecentChanges.Length); i++)
-        {
-            var entry = RecentChanges[i];
-            ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
-            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(Accent.X, Accent.Y, Accent.Z, 0.16f));
-            ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(Accent.X, Accent.Y, Accent.Z, 0.25f));
-            if (ImGui.Button($"{entry.Version}  {entry.Title}##Change{i}", new Vector2(-1, 24)))
-            {
-                _selectedChangelogIndex = i;
-                SelectPage(Page.Changelog);
-            }
-            ImGui.PopStyleColor(3);
-        }
-    }
-
-    private void DrawSidebarSessionState()
-    {
-        var (label, color) = _session.Mode switch
-        {
-            PrismMode.Hosting => ("HOSTING", Good),
-            PrismMode.Viewing => ("CONNECTED", Good),
-            _ => ("IDLE", Muted)
-        };
-
-        ImGui.PushStyleColor(ImGuiCol.Text, color);
-        ImGui.TextUnformatted($"● {label}");
-        ImGui.PopStyleColor();
-
-        if (_session.Mode == PrismMode.Hosting && !string.IsNullOrWhiteSpace(_session.CurrentTitle))
-            ImGui.TextWrapped(TrimForDisplay(_session.CurrentTitle!, 24));
-        else if (_session.Mode == PrismMode.Viewing && _session.ViewerState is { } viewer)
-            ImGui.TextWrapped(TrimForDisplay(viewer.Title, 24));
-        else
-            ImGui.TextDisabled(_deps.Status);
     }
 
     private void SelectPage(Page page)
@@ -1662,19 +1743,6 @@ internal sealed class PrismCastWindow : Window
         ImGui.SameLine(0, 8f);
         ImGui.PushStyleColor(ImGuiCol.Text, Accent);
         ImGui.TextUnformatted("///");
-        ImGui.PopStyleColor();
-
-        var statusText = _session.Mode switch
-        {
-            PrismMode.Hosting => "● LIVE",
-            PrismMode.Viewing => "● CONNECTED",
-            _ => "● IDLE"
-        };
-        var statusColor = _session.Mode == PrismMode.Idle ? Muted : Good;
-        var statusWidth = ImGui.CalcTextSize(statusText).X;
-        ImGui.SameLine(Math.Max(ImGui.GetCursorPosX() + 20, ImGui.GetWindowWidth() - statusWidth - 16));
-        ImGui.PushStyleColor(ImGuiCol.Text, statusColor);
-        ImGui.TextUnformatted(statusText);
         ImGui.PopStyleColor();
         ImGui.Dummy(new Vector2(1, 5));
     }
