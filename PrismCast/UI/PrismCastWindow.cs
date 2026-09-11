@@ -398,6 +398,7 @@ internal sealed class PrismCastWindow : Window
     private readonly Dictionary<string, DateTime> _repeatButtonNextFire = new(StringComparer.Ordinal);
     private int _selectedChangelogIndex;
     private PlexItem? _nowPlayingPlexItem;
+    private PlexItem? _selectedPlexDetailsItem;
     private LibrarySource _librarySource;
 
     private SessionMobileTab _sessionMobileTab = SessionMobileTab.Rooms; // legacy state retained for config/source compatibility
@@ -2374,6 +2375,12 @@ internal sealed class PrismCastWindow : Window
             return;
         }
 
+        if (_selectedPlexDetailsItem is not null)
+        {
+            DrawPlexDetailsView(_selectedPlexDetailsItem, phone: true);
+            return;
+        }
+
         var filtered = items
             .Where(x => string.IsNullOrWhiteSpace(_plexSearch) || PlexItemLabel(x).Contains(_plexSearch, StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -3264,6 +3271,12 @@ internal sealed class PrismCastWindow : Window
         DrawLibraryChips(libraries, selectedIndex);
         ImGui.Spacing();
 
+        if (_selectedPlexDetailsItem is not null)
+        {
+            DrawPlexDetailsView(_selectedPlexDetailsItem, phone: false);
+            return;
+        }
+
         if (canBack)
         {
             if (ImGui.Button("< Back", new Vector2(80, 28)))
@@ -3341,6 +3354,10 @@ internal sealed class PrismCastWindow : Window
             {
                 DrawTechFrame(container ? S9Cyan : Accent);
                 DrawPlexPoster(item, new Vector2(posterWidth, posterHeight));
+                if (ImGui.IsItemClicked())
+                    _selectedPlexDetailsItem = item;
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("View details");
                 ImGui.Spacing();
                 ImGui.TextWrapped(TrimForDisplay(PlexItemLabel(item), phone ? 30 : 38));
                 ImGui.SetCursorPosY(cardHeight - 38f);
@@ -3407,6 +3424,10 @@ internal sealed class PrismCastWindow : Window
                 DrawTechFrame(container ? S9Cyan : Accent);
                 ImGui.SetCursorPosX(Math.Max(5f, (cardWidth - posterWidth) * 0.5f));
                 DrawPlexPoster(item, new Vector2(posterWidth, posterHeight));
+                if (ImGui.IsItemClicked())
+                    _selectedPlexDetailsItem = item;
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("View details");
 
                 ImGui.SetCursorPosY(posterHeight + 9f);
                 DrawCenteredWrappedText(PlexItemLabel(item), cardWidth - 12f, 3);
@@ -3429,6 +3450,141 @@ internal sealed class PrismCastWindow : Window
 
         ImGui.SetCursorPos(new Vector2(startX, startY + totalRows * rowStride));
     }
+
+    private void DrawPlexDetailsView(PlexItem item, bool phone)
+    {
+        var availableWidth = Math.Max(1f, ImGui.GetContentRegionAvail().X);
+        var availableHeight = Math.Max(180f, ImGui.GetContentRegionAvail().Y);
+
+        PushTechButton();
+        if (ImGui.Button("<  BACK TO LIBRARY", new Vector2(phone ? 156f : 172f, 32f)))
+        {
+            _selectedPlexDetailsItem = null;
+            PopTechButton();
+            return;
+        }
+        PopTechButton();
+        ImGui.Spacing();
+
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0.045f, 0.050f, 0.095f, 0.995f));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(phone ? 14f : 18f, 16f));
+        ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 10f);
+        if (ImGui.BeginChild("##PlexDetailsView", new Vector2(0, availableHeight - 42f), true))
+        {
+            DrawTechFrame(AccentHover);
+            if (phone)
+                DrawPhonePlexDetailsContent(item, availableWidth - 28f);
+            else
+                DrawDesktopPlexDetailsContent(item, availableWidth - 36f);
+        }
+        ImGui.EndChild();
+        ImGui.PopStyleVar(2);
+        ImGui.PopStyleColor();
+    }
+
+    private void DrawPhonePlexDetailsContent(PlexItem item, float contentWidth)
+    {
+        var posterWidth = Math.Clamp(contentWidth * 0.42f, 122f, 168f);
+        var posterHeight = posterWidth * 1.46f;
+        ImGui.SetCursorPosX(14f + Math.Max(0f, (contentWidth - posterWidth) * 0.5f));
+        DrawPlexPoster(item, new Vector2(posterWidth, posterHeight));
+        ImGui.Spacing();
+
+        DrawCenteredWrappedText(PlexItemLabel(item), contentWidth, 3);
+        DrawCenteredPlexMetadata(item, contentWidth);
+        ImGui.Spacing();
+        DrawPlexSynopsis(item);
+        ImGui.Spacing();
+        DrawPlexDetailsAction(item, contentWidth, phone: true);
+    }
+
+    private void DrawDesktopPlexDetailsContent(PlexItem item, float contentWidth)
+    {
+        const float posterWidth = 205f;
+        const float gap = 22f;
+        var posterHeight = posterWidth * 1.46f;
+        DrawPlexPoster(item, new Vector2(posterWidth, posterHeight));
+        ImGui.SameLine(0, gap);
+
+        var textWidth = Math.Max(180f, contentWidth - posterWidth - gap);
+        if (ImGui.BeginChild("##PlexDetailsText", new Vector2(textWidth, posterHeight), false))
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, Vector4.One);
+            ImGui.TextWrapped(PlexItemLabel(item));
+            ImGui.PopStyleColor();
+            ImGui.Spacing();
+            DrawPlexMetadata(item);
+            ImGui.Spacing();
+            DrawPlexSynopsis(item);
+            ImGui.Spacing();
+            DrawPlexDetailsAction(item, textWidth, phone: false);
+        }
+        ImGui.EndChild();
+    }
+
+    private static void DrawPlexMetadata(PlexItem item)
+    {
+        ImGui.PushStyleColor(ImGuiCol.Text, S9Cyan);
+        ImGui.TextUnformatted(PlexTypeLabel(item));
+        ImGui.PopStyleColor();
+        var runtime = PlexRuntimeLabel(item);
+        if (!string.IsNullOrWhiteSpace(runtime))
+        {
+            ImGui.SameLine(0, 10f);
+            ImGui.TextDisabled(runtime);
+        }
+    }
+
+    private static void DrawCenteredPlexMetadata(PlexItem item, float width)
+    {
+        var type = PlexTypeLabel(item);
+        var runtime = PlexRuntimeLabel(item);
+        var text = string.IsNullOrWhiteSpace(runtime) ? type : $"{type}  •  {runtime}";
+        var textWidth = ImGui.CalcTextSize(text).X;
+        ImGui.SetCursorPosX(14f + Math.Max(0f, (width - textWidth) * 0.5f));
+        ImGui.PushStyleColor(ImGuiCol.Text, S9Cyan);
+        ImGui.TextUnformatted(text);
+        ImGui.PopStyleColor();
+    }
+
+    private static void DrawPlexSynopsis(PlexItem item)
+    {
+        ImGui.PushStyleColor(ImGuiCol.Text, AccentHover);
+        ImGui.TextUnformatted("SYNOPSIS");
+        ImGui.PopStyleColor();
+        ImGui.Separator();
+        ImGui.Spacing();
+        if (string.IsNullOrWhiteSpace(item.Summary))
+            ImGui.TextDisabled("No synopsis is available for this title.");
+        else
+            ImGui.TextWrapped(item.Summary.Trim());
+    }
+
+    private void DrawPlexDetailsAction(PlexItem item, float contentWidth, bool phone)
+    {
+        var container = IsPlexContainer(item);
+        var width = phone ? Math.Clamp(contentWidth * 0.58f, 150f, 220f) : Math.Min(220f, contentWidth);
+        if (phone)
+            ImGui.SetCursorPosX(14f + Math.Max(0f, (contentWidth - width) * 0.5f));
+
+        if (!PhonePlexActionButton($"PlexDetailsAction{item.RatingKey}", container ? "OPEN" : "PLAY", new Vector2(width, 36f), container))
+            return;
+
+        _selectedPlexDetailsItem = null;
+        if (container)
+            RunUiTask(() => OpenPlexContainerAsync(item));
+        else
+            RunUiTask(() => PlayPlexItemFromUiAsync(item));
+    }
+
+    private static string PlexTypeLabel(PlexItem item) => item.Type.ToLowerInvariant() switch
+    {
+        "movie" => "MOVIE",
+        "show" => "TV SHOW",
+        "season" => "SEASON",
+        "episode" => "EPISODE",
+        _ => "MEDIA",
+    };
 
     private bool PhonePlexActionButton(string id, string label, Vector2 size, bool container)
     {
@@ -6097,6 +6253,7 @@ internal sealed class PrismCastWindow : Window
             _plexHistory.Clear();
             _plexPageTitle = index >= 0 ? mediaLibraries[index].Title : string.Empty;
         }
+        _selectedPlexDetailsItem = null;
     }
 
     private async Task LoadPlexLibraryAsync(PlexLibrary library)
@@ -6108,6 +6265,7 @@ internal sealed class PrismCastWindow : Window
             _plexHistory.Clear();
             _plexPageTitle = library.Title;
         }
+        _selectedPlexDetailsItem = null;
         _plexSearch = "";
     }
 
@@ -6128,6 +6286,7 @@ internal sealed class PrismCastWindow : Window
 
     private void PlexGoBack()
     {
+        _selectedPlexDetailsItem = null;
         lock (_plexLock)
         {
             if (_plexHistory.Count == 0)
