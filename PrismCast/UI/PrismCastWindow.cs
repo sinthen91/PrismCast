@@ -134,7 +134,9 @@ internal sealed class PrismCastWindow : Window
     private const float PhoneStatusBarHeight = 44f;
     private const float PhoneAppHeaderHeight = 106f;
     private const float PhoneBottomNavHeight = 72f;
-    private static readonly Vector2 TabletDefaultSize = new(1054f, 740f);
+    // Matches the approved tablet reference while retaining enough vertical room for
+    // the active-session controls, Join card, and bottom Now Playing bar.
+    private static readonly Vector2 TabletDefaultSize = new(976f, 740f);
     private static readonly Vector2 MiniIdleSize = new(214f, 186f);
     private static readonly Vector2 MiniActiveSize = new(214f, 508f);
 
@@ -450,7 +452,7 @@ internal sealed class PrismCastWindow : Window
         RelayClient relay,
         IObjectTable objects,
         IFramework framework)
-        : base("PrismCast###PrismCastMainResponsive", DeviceWindowFlags)
+        : base("PrismCast###PrismCastMainResponsiveV2", DeviceWindowFlags)
     {
         _pi = pi;
         _pi.Inject(this);
@@ -1534,7 +1536,7 @@ internal sealed class PrismCastWindow : Window
             draw.AddLine(origin + new Vector2(10, PhoneAppHeaderHeight - 1), origin + new Vector2(w - 10, PhoneAppHeaderHeight - 1), U32(new Vector4(S9Blue.X, S9Blue.Y, S9Blue.Z, 0.45f)), 1f);
             draw.AddLine(origin + new Vector2(10, PhoneAppHeaderHeight - 1), origin + new Vector2(318, PhoneAppHeaderHeight - 1), U32(Accent), 2f);
 
-            // Larger supplied PrismCast wordmark so the name and tagline remain readable in phone mode.
+            // Supplied PrismCast wordmark sized around the phone controls.
             ImGui.SetCursorPos(new Vector2(8f, 1f));
             if (!DrawUiAsset(_logoAssetPath, new Vector2(320f, 105f)))
             {
@@ -1725,8 +1727,8 @@ internal sealed class PrismCastWindow : Window
 
     private void DrawSidebar()
     {
-        ImGui.SetCursorPos(new Vector2(10f, 8f));
-        if (!DrawUiAsset(_logoAssetPath, new Vector2(SidebarWidth - 20f, 61f)))
+        ImGui.SetCursorPos(new Vector2(2f, 4f));
+        if (!DrawUiAsset(_logoAssetPath, new Vector2(SidebarWidth - 4f, 66f)))
         {
             var p = ImGui.GetWindowPos();
             DrawPrismGlyph(p + new Vector2(24f, 36f), 11f);
@@ -1775,21 +1777,22 @@ internal sealed class PrismCastWindow : Window
             Page.RemoteControl => "Remote",
             Page.PlexLibrary => "Library",
             Page.LocalFiles => "Library",
-            Page.JoinSession => "Session",
+            Page.JoinSession => "Watch Together",
             Page.Settings => "Settings",
             Page.Changelog => "What's New",
             _ => "PrismCast"
         };
+        var suffix = _page == Page.JoinSession ? "// SESSION" : "///";
 
         ImGui.Dummy(new Vector2(1, 5));
         ImGui.SetCursorPosX(14f);
-        ImGui.SetWindowFontScale(1.10f);
+        ImGui.SetWindowFontScale(_page == Page.JoinSession ? 1.28f : 1.10f);
         ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.92f, 0.94f, 1f, 1f));
         ImGui.TextUnformatted(title);
         ImGui.PopStyleColor();
         ImGui.SameLine(0, 8f);
         ImGui.PushStyleColor(ImGuiCol.Text, Accent);
-        ImGui.TextUnformatted("///");
+        ImGui.TextUnformatted(suffix);
         ImGui.PopStyleColor();
         ImGui.SetWindowFontScale(1f);
         ImGui.Dummy(new Vector2(1, 5));
@@ -4011,8 +4014,6 @@ internal sealed class PrismCastWindow : Window
 
     private void DrawTabletSession()
     {
-        DrawSectionHeading("Watch Together", "// SESSION");
-        ImGui.Spacing();
         MaybeRefreshGroupStatuses();
 
         var available = ImGui.GetContentRegionAvail();
