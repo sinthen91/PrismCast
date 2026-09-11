@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows7.0</TargetFramework>
+    <Platforms>x64</Platforms>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>PrismCast</AssemblyName>
+    <RootNamespace>PrismCast</RootNamespace>
+    <Version>0.2.0.41</Version>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockfileAssemblies>true</CopyLocalLockfileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="PrismCast.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <EmbeddedResource Include="Assets\prismcast-logo.png" />
+    <EmbeddedResource Include="Assets\play-white.png" />
+    <EmbeddedResource Include="Assets\pause-white.png" />
+    <PackageReference Include="SharpCompress" Version="0.50.4" />
+    <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
+    <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />
+  </ItemGroup>
+</Project>

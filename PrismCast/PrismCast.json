@@ -1,0 +1,14 @@
+{
+  "Author": "sinthen91",
+  "Name": "PrismCast",
+  "Punchline": "Synchronized world-space media for FFXIV.",
+  "Description": "Host synchronized local, web, YouTube, or Plex media on an in-game world-space screen.",
+  "InternalName": "PrismCast",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "utility",
+    "media",
+    "social"
+  ],
+  "RepoUrl": "https://github.com/sinthen91/PrismCast"
+}
