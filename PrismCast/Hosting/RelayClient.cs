@@ -184,6 +184,16 @@ internal sealed class RelayClient : IDisposable
         response.EnsureSuccessStatusCode();
     }
 
+    internal async Task<bool> DeleteRoomAsync(string relayBaseUrl, string secret, string roomId, CancellationToken ct)
+    {
+        using var response = await _http.PostAsJsonAsync(relayBaseUrl.TrimEnd('/') + "/room/delete",
+            new { secret, roomId }, JsonOptions, ct).ConfigureAwait(false);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return false;
+        response.EnsureSuccessStatusCode();
+        return true;
+    }
+
     internal async Task KickRoomMemberAsync(string relayBaseUrl, string secret, string roomId, string viewerId,
         CancellationToken ct)
     {
