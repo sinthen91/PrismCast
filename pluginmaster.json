@@ -19,6 +19,6 @@
       "social"
     ],
     "Changelog": "Alpha.61: adds 720p30, 1080p30, and 1080p60 Screen Share quality presets, per-device subtitle control, and removes the redundant Session footer player.",
-    "IconUrl": "https://raw.githubusercontent.com/sinthen91/PrismCast/main/PrismCast/Assets/prismcast-icon.png"
+    "IconUrl": "https://raw.githubusercontent.com/sinthen91/PrismCast/main/PrismCast/Assets/prismcast-icon.png?v=2"
   }
 ]
