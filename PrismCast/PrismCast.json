@@ -10,5 +10,6 @@
     "media",
     "social"
   ],
-  "RepoUrl": "https://github.com/Sinnsational/PrismCast"
+  "RepoUrl": "https://github.com/Sinnsational/PrismCast",
+  "IconUrl": "https://raw.githubusercontent.com/Sinnsational/PrismCast/main/PrismCast/Assets/prismcast-icon.png?v=2"
 }
