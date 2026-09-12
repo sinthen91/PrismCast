@@ -25,7 +25,7 @@ const v2=groupRoutes({room,putRoom,get,put,del,code,hid});
 async function app(req,res){
  if(req.method==='OPTIONS'){res.writeHead(204,headers);return res.end()}
  const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`),p=u.pathname;
- if(req.method==='GET'&&(p==='/'||p==='/health'))return send(res,{service:'PrismCast directory',ok:true,version:2});
+ if(req.method==='GET'&&(p==='/'||p==='/health'))return send(res,{service:'PrismCast directory',ok:true,version:2,mediaVersion:1});
  if(await v2(req,res,u,body,send))return;
  // Upgraded groups cannot be read or changed through unauthenticated legacy APIs.
  if(p.startsWith('/room/')&&!['/room/create','/room/announce','/room/close-session'].includes(p)){

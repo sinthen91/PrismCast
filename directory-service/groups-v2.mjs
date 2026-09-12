@@ -12,7 +12,7 @@ export function can(r, id, action) {
   if (!member) return false;
   if (member.host) return true;
   if (action === 'invite') return true;
-  return ['pause', 'seek', 'start', 'queue-add', 'queue-remove'].includes(action)
+  return ['pause', 'seek', 'start', 'queue-add', 'queue-remove', 'queue-move', 'queue-plex'].includes(action)
     && ((member.role === 'moderator' && r.moderatorsEnabled !== false) || r.remoteViewerId === id);
 }
 function screen(value) {
@@ -50,7 +50,7 @@ export function groupRoutes({room, putRoom, get, put, del, code, hid}) {
       sessionInviteCode:session?.inviteCode||'', title:session?.title||'',hostName:session?.hostName||'',
       viewerCount:session ? active.length : 0, moderatorsEnabled:r.moderatorsEnabled!==false,
       remoteViewerId:r.remoteViewerId||'',accessToken:token(r,id),
-      venue:r.venue||null,catalog:r.catalog||[],queue:r.queue||[],
+      mediaVersion:1,plexServer:r.plexServer||'',venue:r.venue||null,catalog:r.catalog||[],queue:r.queue||[],
       members:Object.entries(r.members).map(([viewerId,m])=>({viewerId,firstName:m.firstName,isHost:!!m.host,
         role:m.host?'owner':m.role||'viewer'}))};
   };
@@ -102,13 +102,15 @@ export function groupRoutes({room, putRoom, get, put, del, code, hid}) {
       if(action==='command') {
         if(!can(r,id,b.type))fail('This role cannot perform that action',403);
         if(!live(r))fail('Venue is offline',409);
-        if(!['pause','seek','start'].includes(b.type))fail('Invalid command');
+        if(!['pause','seek','start','queue-plex'].includes(b.type))fail('Invalid command');
         if(b.type==='pause' && typeof b.paused!=='boolean')fail('Invalid pause state');
         if(b.type==='seek' && !finite(b.seconds,0,864000))fail('Invalid position');
-        if(b.type==='start' && !(r.catalog||[]).some(x=>x.id===b.catalogId))fail('Choose media from the owner catalog');
-        r.commands||=[];if(r.commands.length>=30)fail('Command queue full',429);
+        if(b.type==='start' && !(r.catalog||[]).some(x=>x.id===b.catalogId))fail('Choose theater media');
+        if(b.type==='start' && b.entryId && !(r.queue||[]).some(q=>q.id===b.entryId && q.catalogId===b.catalogId))fail('Queue entry no longer exists',409);
+        if(b.type==='queue-plex' && (!/^[a-f0-9]{64}$/.test(b.plexServer||'') || b.plexServer!==r.plexServer || !/^[0-9]{1,20}$/.test(b.ratingKey||'')))fail('Choose media from the host Plex server');
+        r.commands||=[];if(r.commands.length>=100)fail('Command queue full',429);
         r.commands.push({id:crypto.randomUUID(),viewerId:id,type:b.type,paused:b.paused===true,
-          seconds:b.seconds||0,catalogId:str(b.catalogId,80),created:Date.now()});
+          seconds:b.seconds||0,catalogId:str(b.catalogId,80),entryId:str(b.entryId,80),...(b.type==='queue-plex'?{plexServer:b.plexServer,ratingKey:b.ratingKey}:{}),created:Date.now()});
         putRoom(r);send(res,{ok:true});return true;
       }
       if(action==='poll') {
@@ -121,18 +123,51 @@ export function groupRoutes({room, putRoom, get, put, del, code, hid}) {
         if(!r.members[id].host)fail('Owner required',403);
         send(res,{allowed:can(r,str(b.actor,80),b.type)});return true;
       }
-      if(action==='queue-add'||action==='queue-remove') {
+      if(action==='queue-add'||action==='queue-remove'||action==='queue-move') {
         if(!can(r,id,action))fail('This role cannot edit the queue',403);
         r.queue||=[];
         if(action==='queue-add') {
           if(r.queue.length>=100)fail('Queue is full');
           if(!(r.catalog||[]).some(x=>x.id===b.catalogId))fail('Choose media from the owner catalog');
           r.queue.push({id:crypto.randomUUID(),catalogId:b.catalogId});
-        }else r.queue=r.queue.filter(x=>x.id!==b.entryId);
+        }else if(action==='queue-move') {
+          if(![-1,1].includes(b.direction))fail('Invalid queue direction');
+          const index=r.queue.findIndex(x=>x.id===b.entryId);if(index<0)fail('Queue entry no longer exists',409);
+          const target=Math.max(0,Math.min(r.queue.length-1,index+b.direction));
+          const [entry]=r.queue.splice(index,1);r.queue.splice(target,0,entry);
+        }else {
+          r.queue=r.queue.filter(x=>x.id!==b.entryId);
+          r.catalog=(r.catalog||[]).filter(x=>x.saved!==false || r.queue.some(q=>q.catalogId===x.id));
+        }
         putRoom(r);send(res,snapshot(r,id));return true;
       }
       if(!r.members[id].host)fail('Owner required',403);
-      if(action==='role') {
+      if(action==='media-upsert') {
+        const x=b.item;
+        if(!x || !safeId(x.id) || !str(x.title,160) || !['plex','local','url'].includes(x.kind) || typeof x.saved!=='boolean')fail('Invalid media');
+        if(typeof b.queue!=='boolean')fail('Invalid queue flag');
+        r.catalog||=[];r.queue||=[];
+        if(b.queue && r.queue.length>=100)fail('Queue is full');
+        const old=r.catalog.find(y=>y.id===x.id);
+        const keepIds=new Set(r.queue.map(q=>q.catalogId));
+        r.catalog=r.catalog.filter(y=>y.saved!==false || keepIds.has(y.id) || y.id===x.id);
+        if(!old && r.catalog.length>=200)fail('Saved media is full');
+        if(x.kind==='plex' && b.plexServer!=null) {
+          if(!/^[a-f0-9]{64}$/.test(b.plexServer))fail('Invalid Plex server');
+          r.plexServer=b.plexServer;
+        }
+        // Source paths, URLs and Plex credentials always remain on the owner's device.
+        const item={id:x.id,title:str(x.title,160),kind:x.kind,saved:!!(x.saved || (old && old.saved!==false))};
+        r.catalog=r.catalog.filter(y=>y.id!==x.id);r.catalog.push(item);
+        if(b.queue)r.queue.push({id:crypto.randomUUID(),catalogId:x.id});
+      }else if(action==='media-unsave') {
+        const item=(r.catalog||[]).find(x=>x.id===b.catalogId);if(!item)fail('Media no longer exists',409);
+        if((r.queue||[]).some(q=>q.catalogId===item.id)) item.saved=false;
+        else r.catalog=r.catalog.filter(x=>x.id!==item.id);
+      }else if(action==='plex-source') {
+        if(!/^[a-f0-9]{64}$/.test(b.plexServer||''))fail('Invalid Plex server');
+        r.plexServer=b.plexServer;
+      }else if(action==='role') {
         const target=own(r.members,str(b.target,80))?r.members[str(b.target,80)]:null;
         if(!target||target.host||!['moderator','viewer'].includes(b.role))fail('Invalid role target');
         target.role=b.role;
