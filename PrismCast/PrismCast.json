@@ -1,5 +1,5 @@
 {
-  "Author": "sinthen91",
+  "Author": "Sinnsational",
   "Name": "PrismCast",
   "Punchline": "Your media. Your friends. One screen. Watch together anywhere in Eorzea.",
   "Description": "Synchronized local, web, Plex, and live screen-sharing watch parties for FFXIV.",
@@ -10,5 +10,5 @@
     "media",
     "social"
   ],
-  "RepoUrl": "https://github.com/sinthen91/PrismCast"
+  "RepoUrl": "https://github.com/Sinnsational/PrismCast"
 }

@@ -7289,7 +7289,7 @@ internal sealed class PrismCastWindow : Window
         ImGui.TextDisabled("AGPL-3.0-or-later");
         ImGui.Spacing();
         if (ImGui.Button("Copy Source URL", new Vector2(140, 30)))
-            ImGui.SetClipboardText("https://github.com/sinthen91/PrismCast");
+            ImGui.SetClipboardText("https://github.com/Sinnsational/PrismCast");
     }
 
     private void SettingsHeading(string text)
