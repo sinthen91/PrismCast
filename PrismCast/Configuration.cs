@@ -6,10 +6,11 @@ namespace PrismCast;
 [Serializable]
 internal sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 2;
+    public int Version { get; set; } = 3;
 
     // Playback
     public int Volume { get; set; } = 70;
+    public bool SubtitlesEnabled { get; set; }
 
     // Shared world-space screen state
     public bool CurvedScreen { get; set; } = true;
@@ -38,6 +39,12 @@ internal sealed class Configuration : IPluginConfiguration
     public bool ScanLocalMediaOnStartup { get; set; } = true;
     public bool IncludeSubfolders { get; set; } = true;
 
+    // Screen-share capture. Device IDs remain local and are never included in
+    // session state or sent to the PrismCast directory.
+    public string ScreenShareAudioDeviceId { get; set; } = "";
+    // 0 = Performance (720p30), 1 = High Quality (1080p30), 2 = High Motion (1080p60)
+    public int ScreenShareQualityPreset { get; set; }
+
     // Internal PrismCast directory identity. RelayBaseUrl is retained only so older alpha configs
     // deserialize safely; normal users never configure the directory endpoint.
     public string RelayBaseUrl { get; set; } = "";
@@ -53,10 +60,17 @@ internal sealed class Configuration : IPluginConfiguration
     public bool NearbyDiscoveryEnabled { get; set; } = false; // legacy, no Nearby UI
 
     // UI
-    // 0 = Automatic, 1 = Tablet, 2 = Phone
+    // 0 = Automatic, 1 = Tablet, 2 = Mobile
     public int InterfaceMode { get; set; } = 0;
     public bool RememberLastPage { get; set; } = true;
     public int LastPage { get; set; }
+
+    // First-run guide. A version (instead of a Boolean) lets later releases add a
+    // short migration tour without erasing a user's media or layout preferences.
+    public int OnboardingVersion { get; set; }
+    public int OnboardingStep { get; set; }
+    public int OnboardingLayoutChoice { get; set; }
+    public string OnboardingLocalMediaPath { get; set; } = "";
 }
 
 [Serializable]
@@ -68,4 +82,3 @@ internal sealed class PrismRoomBookmark
     public bool IsHost { get; set; }
     public string InviteCode { get; set; } = "";
 }
-

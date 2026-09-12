@@ -1,6 +1,6 @@
 # PrismCast
 
-Current confirmed development package: **0.2.0-alpha.41**.
+Current development package: **0.2.0-alpha.61**.
 
 PrismCast is a standalone Dalamud plugin for synchronized, world-space media playback in Final Fantasy XIV.
 
@@ -10,6 +10,7 @@ It can host:
 - HTTP/HTTPS video URLs
 - YouTube links through yt-dlp
 - movies, TV shows, anime, and episodes selected from a Plex server
+- the entire desktop or one visible application window, including Windows output audio
 
 PrismCast is its own plugin and identity. It does not replace or patch other synchronization plugins and can run alongside them normally.
 
@@ -22,13 +23,26 @@ PrismCast supports two shared-session flows:
 
 Short Watch Party codes and Group state use PrismCast's built-in directory service automatically. Normal users do not configure or enable a relay.
 
+## Privacy and account safety
+
+- Plex authentication happens on Plex's official website. PrismCast never receives the user's Plex email address or password.
+- Plex provides a server access token after approval. That token is encrypted locally with Windows DPAPI CurrentUser, is never sent to the PrismCast directory or viewers, and is deleted by **Disconnect Plex**.
+- PrismCast has no YouTube sign-in and does not request or store YouTube credentials or browser cookies. Its managed yt-dlp calls explicitly ignore external configuration.
+- PrismCast has no browser extension or streaming-service login integration. Browser content is shared only through the host-selected screen/window capture.
+- Screen sharing transmits visible pixels in the selected region. Hosts should finish signing in and remove private notifications or windows before starting a share.
+- Local folders and Plex library listings stay on the user's computer. Only the specific video deliberately hosted is streamed through a temporary token-protected tunnel.
+- The session directory receives only what it needs for Watch Party and Group features: random PrismCast identifiers, FFXIV first names, Group names and membership, the hosted media title, and temporary connection information. Live records expire after approximately three minutes unless refreshed; Groups persist until left or deleted.
+- The directory operator can technically access those limited server-side records and active connection information. This does not provide access to Plex or YouTube accounts, the Plex token, a user's library, local folders, or unrelated files.
+
 ## How hosting works
 
 For local/Plex media, PrismCast keeps the original file on the host PC. It starts a loopback byte-range HTTP server and creates a temporary Cloudflare Quick Tunnel. Viewers receive a short-lived session location and token, not the host's Plex credentials.
 
 For public HTTP/YouTube sources, the session state contains the source URL while each PrismCast client handles playback locally.
 
-Playback state is synchronized periodically. Viewers hard-seek when drift is large and make small temporary playback-speed corrections when drift is minor.
+For screen sharing, PrismCast captures only the source explicitly selected by the host, encodes it into a temporary low-latency stream, and displays it through the normal in-world player. Individual-window mode captures that window's visible desktop region, so the window must remain visible and unobstructed. The selected window title is never sent to viewers or the directory. The temporary capture files are replaced for each session. DRM-protected video may appear black; PrismCast does not provide or attempt a workaround.
+
+Screen-share audio can be captured from any active Windows playback endpoint. With Wave Link, route the browser to **Wave Link Browser**, select that same endpoint in PrismCast, and mute only the Browser row under **Personal Mix** (called Monitor Mix in older Wave Link versions). Do not mute the browser tab, its Windows app volume, or the underlying Wave Link Browser endpoint: PrismCast must still receive that active signal. The muxed PrismCast audio then arrives with the delayed video instead of playing early from the browser. Device IDs and friendly names remain local.
 
 ## Commands
 
@@ -64,6 +78,7 @@ PrismCast downloads its media/runtime tools into its plugin configuration direct
 - yt-dlp
 - Deno
 - cloudflared (host only, downloaded when hosting is first used)
+- FFmpeg (host only, downloaded when screen sharing is first used)
 
 Viewers do not manually install any of these. Playback dependencies can warm up in the background after PrismCast loads.
 

@@ -46,6 +46,9 @@ async function app(req,res){
  if(req.method==='POST'&&p==='/room/leave'){
   const b=await body(req),r=room(String(b?.roomId||'').toUpperCase());if(!r||!b?.viewerId)return send(res,{error:'room not found'},404);if(r.members?.[b.viewerId]?.host)return send(res,{error:'host cannot leave own room'},400);delete r.members?.[b.viewerId];putRoom(r);return send(res,{ok:true});
  }
+ if(req.method==='POST'&&p==='/room/delete'){
+  const b=await body(req);if(!b?.secret||!b?.roomId)return send(res,{error:'missing fields'},400);const r=room(String(b.roomId).toUpperCase());if(!r)return send(res,{error:'room not found'},404);if(hid(b.secret)!==r.hostId)return send(res,{error:'forbidden'},403);del(`room-invite:${r.inviteCode}`);del(`room-live:${r.roomId}`);del(`room:${r.roomId}`);return send(res,{ok:true});
+ }
  if(req.method==='POST'&&p==='/room/kick'){
   const b=await body(req);if(!b?.secret||!b?.roomId||!b?.viewerId)return send(res,{error:'missing fields'},400);const r=room(String(b.roomId).toUpperCase());if(!r)return send(res,{error:'room not found'},404);if(hid(b.secret)!==r.hostId)return send(res,{error:'forbidden'},403);delete r.members?.[b.viewerId];putRoom(r);return send(res,{ok:true});
  }

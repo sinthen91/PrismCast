@@ -5,7 +5,15 @@ using System.Xml.Linq;
 namespace PrismCast.Hosting;
 
 internal sealed record PlexLibrary(string Key, string Title, string Type);
-internal sealed record PlexItem(string RatingKey, string Title, string Year, string Type, int Index, string Thumb, long DurationMs);
+internal sealed record PlexItem(
+    string RatingKey,
+    string Title,
+    string Year,
+    string Type,
+    int Index,
+    string Thumb,
+    long DurationMs,
+    string Summary);
 internal sealed record PlexLoginPin(long Id, string Code, string AuthUrl);
 internal sealed record PlexServer(string Name, string BaseUrl, string Token, bool Local, bool Relay);
 internal sealed record PlexMediaSource(string Title, string Url);
@@ -206,7 +214,8 @@ internal sealed class PlexClient : IDisposable
                     type,
                     index,
                     thumb,
-                    durationMs);
+                    durationMs,
+                    (string?)e.Attribute("summary") ?? "");
             })
             .Where(x => x.RatingKey.Length > 0 && x.Title.Length > 0)
             .ToList();

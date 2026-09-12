@@ -4,6 +4,7 @@ using Dalamud.Plugin.Services;
 using Dalamud.Game.Command;
 using PrismCast.Hosting;
 using PrismCast.Playback;
+using PrismCast.Security;
 using PrismCast.UI;
 
 namespace PrismCast;
@@ -12,7 +13,9 @@ public sealed class Plugin : IDalamudPlugin
 {
     private readonly IDalamudPluginInterface _pi;
     private readonly ICommandManager _commands;
+    private readonly IPluginLog _log;
     private readonly WindowSystem _windows = new("PrismCast");
+    private bool _drawDisabled;
 
     private readonly Configuration _config;
     private readonly DependencyManager _deps;
@@ -22,6 +25,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly PrismDx _dx;
     private readonly VideoEngine _video;
     private readonly RelayClient _relay;
+    private readonly ProtectedSecretStore _secrets;
+    private readonly DesktopCaptureStreamer _capture;
     private readonly SessionController _session;
     private readonly PrismCastWindow _window;
 
@@ -34,6 +39,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         _pi = pi;
         _commands = commands;
+        _log = log;
 
         _config = pi.GetPluginConfig() as Configuration ?? new Configuration();
         var configChanged = false;
@@ -47,6 +53,22 @@ public sealed class Plugin : IDalamudPlugin
             _config.RoomClientId = Guid.NewGuid().ToString("N");
             configChanged = true;
         }
+        // Older alpha builds retained the account-wide discovery token even though only
+        // the chosen Plex server token is needed after sign-in. Remove that unused secret.
+        if (!string.IsNullOrWhiteSpace(_config.PlexAccountToken))
+        {
+            _config.PlexAccountToken = "";
+            configChanged = true;
+        }
+        _secrets = new ProtectedSecretStore(pi.ConfigDirectory.FullName);
+        var plexToken = _secrets.Get(ProtectedSecretStore.PlexServerTokenKey);
+        if (!string.IsNullOrWhiteSpace(_config.PlexToken))
+        {
+            _secrets.Set(ProtectedSecretStore.PlexServerTokenKey, _config.PlexToken);
+            plexToken = _config.PlexToken;
+            _config.PlexToken = "";
+            configChanged = true;
+        }
         if (configChanged)
             pi.SavePluginConfig(_config);
 
@@ -56,14 +78,16 @@ public sealed class Plugin : IDalamudPlugin
         _plex = new PlexClient
         {
             BaseUrl = _config.PlexBaseUrl,
-            Token = _config.PlexToken,
+            Token = plexToken,
             ClientIdentifier = _config.PlexClientIdentifier
         };
 
         _dx = new PrismDx(pi);
         _video = new VideoEngine(_dx, _deps, log, framework);
+        _video.SetSubtitlesEnabled(_config.SubtitlesEnabled);
         _relay = new RelayClient();
-        _session = new SessionController(pi, _config, _deps, _server, _tunnel, _video, _relay, log, objects, framework);
+        _capture = new DesktopCaptureStreamer(pi.ConfigDirectory.FullName, _deps, log);
+        _session = new SessionController(pi, _config, _deps, _server, _tunnel, _video, _relay, _capture, log, objects, framework);
 
         _video.Screen.SetTransform(
             _config.ScreenPosition,
@@ -73,16 +97,18 @@ public sealed class Plugin : IDalamudPlugin
             _config.ScreenScale);
         _video.Screen.Curved = _config.CurvedScreen;
 
-        _window = new PrismCastWindow(pi, _config, _session, _deps, _plex, _video, _relay, objects, framework);
+        _window = new PrismCastWindow(pi, _config, _session, _deps, _plex, _video, _relay, _secrets, objects, framework);
         _windows.AddWindow(_window);
 
         commands.AddHandler("/prismcast", new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open PrismCast."
+            HelpMessage = "Open or restore PrismCast.",
+            ShowInHelp = true
         });
         commands.AddHandler("/prism", new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open PrismCast."
+            HelpMessage = "Open or restore PrismCast.",
+            ShowInHelp = true
         });
 
         pi.UiBuilder.Draw += Draw;
@@ -98,14 +124,29 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnCommand(string command, string arguments) => Open();
 
-    private void Open() => _window.IsOpen = true;
+    private void Open() => _window.RequestShow();
 
     private void Draw()
     {
-        _session.Tick();
-        _video.Tick();
-        _video.Screen.Draw();
-        _windows.Draw();
+        if (_drawDisabled)
+            return;
+
+        try
+        {
+            _session.Tick();
+            _video.Tick();
+            _video.Screen.Draw();
+            _windows.Draw();
+        }
+        catch (Exception ex)
+        {
+            // A plugin exception must not repeat every frame and take the rest of
+            // Dalamud's shared UI loop down with it. Stop PrismCast drawing until
+            // the plugin is reloaded and preserve the first useful stack trace.
+            _drawDisabled = true;
+            _window.IsOpen = false;
+            _log.Error(ex, "PrismCast draw path failed and has been disabled until reload");
+        }
     }
 
     public void Dispose()
@@ -124,6 +165,7 @@ public sealed class Plugin : IDalamudPlugin
         _server.Dispose();
         _plex.Dispose();
         _relay.Dispose();
+        _capture.Dispose();
         _deps.Dispose();
         _dx.Dispose();
     }

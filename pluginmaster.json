@@ -3,21 +3,21 @@
     "Author": "sinthen91",
     "Name": "PrismCast",
     "Punchline": "Synchronized world-space media for FFXIV.",
-    "Description": "Host synchronized local, web, YouTube, or Plex media on an in-game world-space screen.",
+    "Description": "Synchronized local, web, Plex, and live screen-sharing watch parties for FFXIV.",
     "InternalName": "PrismCast",
-    "AssemblyVersion": "0.2.0.41",
-    "TestingAssemblyVersion": "0.2.0.41",
+    "AssemblyVersion": "0.2.0.61",
+    "TestingAssemblyVersion": "0.2.0.61",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
-    "DownloadLinkInstall": "https://github.com/sinthen91/PrismCast/releases/download/v0.2.0-alpha.41/PrismCast.zip",
-    "DownloadLinkUpdate": "https://github.com/sinthen91/PrismCast/releases/download/v0.2.0-alpha.41/PrismCast.zip",
-    "DownloadLinkTesting": "https://github.com/sinthen91/PrismCast/releases/download/v0.2.0-alpha.41/PrismCast.zip",
+    "DownloadLinkInstall": "https://github.com/sinthen91/PrismCast/releases/download/v0.2.0-alpha.61/PrismCast.zip",
+    "DownloadLinkUpdate": "https://github.com/sinthen91/PrismCast/releases/download/v0.2.0-alpha.61/PrismCast.zip",
+    "DownloadLinkTesting": "https://github.com/sinthen91/PrismCast/releases/download/v0.2.0-alpha.61/PrismCast.zip",
     "RepoUrl": "https://github.com/sinthen91/PrismCast",
     "Tags": [
       "utility",
       "media",
       "social"
     ],
-    "Changelog": "Confirmed alpha.41: removed the 600-item Plex library display cap, aligned normal browsing with full-library search, and added viewport-based poster-grid virtualization for large Plex libraries."
+    "Changelog": "Alpha.61: adds 720p30, 1080p30, and 1080p60 Screen Share quality presets, per-device subtitle control, and removes the redundant Session footer player."
   }
 ]

@@ -98,6 +98,7 @@ internal sealed class MpvSoftwareRenderer : IDisposable
     private int _width;
     private int _height;
     private int _bytes;
+    private bool _subtitlesEnabled;
     private byte[]? _frontFrame;
     private byte[]? _backFrame;
     private int _frameVersion;
@@ -133,6 +134,10 @@ internal sealed class MpvSoftwareRenderer : IDisposable
         SetOption("terminal", "no");
         SetOption("volume", Math.Clamp(volume, 0, 100).ToString(CultureInfo.InvariantCulture));
         SetOption("ytdl", "yes");
+        SetOption("ytdl-raw-options", "ignore-config=");
+        // PrismCast renders at 1280x720. Avoid making slower viewers decode a 1080p/4K
+        // live rendition that cannot improve the shared screen but can multiply latency.
+        SetOption("ytdl-format", "best[height<=720]/best");
         SetOption("stream-lavf-o",
             "reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=5xx,reconnect_delay_max=30");
 
@@ -240,8 +245,11 @@ internal sealed class MpvSoftwareRenderer : IDisposable
 
             _ = Command(_mpv, "set", "speed", "1", null);
             var start = Math.Max(0, seconds).ToString("F3", CultureInfo.InvariantCulture);
+            var subtitleOptions = _subtitlesEnabled
+                ? "sid=auto,sub-visibility=yes"
+                : "sid=no,sub-visibility=no";
             var result = Command(_mpv, "loadfile", source, "replace", "0",
-                $"start={start},pause={(playing ? "no" : "yes")}", null);
+                $"start={start},pause={(playing ? "no" : "yes")},{subtitleOptions}", null);
             return result >= 0;
         }
     }
@@ -253,6 +261,13 @@ internal sealed class MpvSoftwareRenderer : IDisposable
 
     internal void SetSpeed(double speed) =>
         SetProperty("speed", Math.Clamp(speed, 0.5, 2.0).ToString("F3", CultureInfo.InvariantCulture));
+
+    internal void SetSubtitlesEnabled(bool enabled)
+    {
+        _subtitlesEnabled = enabled;
+        SetProperty("sid", enabled ? "auto" : "no");
+        SetProperty("sub-visibility", enabled ? "yes" : "no");
+    }
 
     internal void Seek(double seconds)
     {

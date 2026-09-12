@@ -19,11 +19,13 @@ internal sealed class DependencyManager : IDisposable
     internal string YtDlpExe => Path.Combine(_root, "yt-dlp.exe");
     internal string DenoExe => Path.Combine(_root, "deno.exe");
     internal string CloudflaredExe => Path.Combine(_root, "cloudflared.exe");
+    internal string FfmpegExe => Path.Combine(_root, "ffmpeg.exe");
 
     internal bool ReadyForPlayback =>
         File.Exists(MpvDll) && File.Exists(YtDlpExe) && File.Exists(DenoExe);
 
     internal bool ReadyForHosting => File.Exists(CloudflaredExe);
+    internal bool ReadyForCapture => File.Exists(FfmpegExe);
 
     internal string Status { get; private set; } = "Not initialized";
 
@@ -92,6 +94,44 @@ internal sealed class DependencyManager : IDisposable
                 CloudflaredExe, cancellationToken).ConfigureAwait(false);
 
             Status = ReadyForPlayback ? "Ready" : "Hosting runtime ready";
+        }
+        finally
+        {
+            _ensureGate.Release();
+        }
+    }
+
+    internal async Task EnsureCaptureAsync(CancellationToken cancellationToken = default)
+    {
+        await _ensureGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (ReadyForCapture)
+            {
+                Status = "Screen capture ready";
+                return;
+            }
+
+            Status = "Downloading screen-capture runtime";
+            Directory.CreateDirectory(_root);
+            var zipPath = Path.Combine(_root, "ffmpeg.zip");
+            try
+            {
+                await DownloadDirectAsync(
+                    "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+                    zipPath, cancellationToken).ConfigureAwait(false);
+                using var zip = ZipFile.OpenRead(zipPath);
+                var entry = zip.Entries.FirstOrDefault(e =>
+                    e.FullName.EndsWith("/bin/ffmpeg.exe", StringComparison.OrdinalIgnoreCase));
+                if (entry is null)
+                    throw new InvalidOperationException("The FFmpeg package did not contain ffmpeg.exe.");
+                entry.ExtractToFile(FfmpegExe, true);
+            }
+            finally
+            {
+                try { File.Delete(zipPath); } catch { }
+            }
+            Status = "Screen capture ready";
         }
         finally
         {

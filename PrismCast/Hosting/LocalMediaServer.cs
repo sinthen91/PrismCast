@@ -24,6 +24,7 @@ internal sealed class LocalMediaServer : IDisposable
     internal string Token { get; private set; } = "";
     internal string? MediaPath { get; set; }
     internal string? MediaProxyUrl { get; set; }
+    internal string? LiveMediaDirectory { get; set; }
     internal Func<PrismSessionState?>? StateProvider { get; set; }
 
     public LocalMediaServer(IPluginLog log)
@@ -111,8 +112,14 @@ internal sealed class LocalMediaServer : IDisposable
 
             if (uri.AbsolutePath.Equals("/presence", StringComparison.OrdinalIgnoreCase))
             {
-                if (query.TryGetValue("viewerId", out var viewerId) && query.TryGetValue("name", out var name))
-                    ViewerPresenceRegistry.Register(viewerId, name);
+                if (query.TryGetValue("viewerId", out var viewerId))
+                {
+                    if (query.TryGetValue("action", out var action) &&
+                        action.Equals("leave", StringComparison.OrdinalIgnoreCase))
+                        ViewerPresenceRegistry.Remove(viewerId);
+                    else if (query.TryGetValue("name", out var name))
+                        ViewerPresenceRegistry.Register(viewerId, name);
+                }
 
                 await WriteTextAsync(stream, 200, "OK", "application/json", "{\"ok\":true}", method == "HEAD", ct)
                     .ConfigureAwait(false);
@@ -141,9 +148,66 @@ internal sealed class LocalMediaServer : IDisposable
                 return;
             }
 
+            if (uri.AbsolutePath.StartsWith("/live/", StringComparison.OrdinalIgnoreCase))
+            {
+                await ServeLiveMediaAsync(stream, uri.AbsolutePath[6..], method, ct).ConfigureAwait(false);
+                return;
+            }
+
             await WriteTextAsync(stream, 404, "Not Found", "text/plain", "Not Found", method == "HEAD", ct)
                 .ConfigureAwait(false);
         }
+    }
+
+    private async Task ServeLiveMediaAsync(NetworkStream stream, string requestedName, string method, CancellationToken ct)
+    {
+        var directory = LiveMediaDirectory;
+        var name = Path.GetFileName(requestedName);
+        if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(name) ||
+            !string.Equals(name, requestedName, StringComparison.Ordinal) ||
+            !(name.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase) ||
+              name.EndsWith(".ts", StringComparison.OrdinalIgnoreCase)))
+        {
+            await WriteTextAsync(stream, 404, "Not Found", "text/plain", "Live media unavailable", method == "HEAD", ct).ConfigureAwait(false);
+            return;
+        }
+
+        var path = Path.Combine(directory, name);
+        if (!File.Exists(path))
+        {
+            await WriteTextAsync(stream, 404, "Not Found", "text/plain", "Live segment unavailable", method == "HEAD", ct).ConfigureAwait(false);
+            return;
+        }
+
+        byte[] payload;
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                payload = await File.ReadAllBytesAsync(path, ct).ConfigureAwait(false);
+                break;
+            }
+            catch (IOException) when (attempt < 4)
+            {
+                await Task.Delay(30, ct).ConfigureAwait(false);
+            }
+        }
+
+        var contentType = name.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase)
+            ? "application/vnd.apple.mpegurl" : "video/mp2t";
+        if (name.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase))
+        {
+            var lines = Encoding.UTF8.GetString(payload).Split('\n');
+            payload = Encoding.UTF8.GetBytes(string.Join("\n", lines.Select(line =>
+                string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith('#')
+                    ? line : line.Trim() + "?token=" + Uri.EscapeDataString(Token))));
+        }
+
+        var header = Encoding.ASCII.GetBytes(
+            $"HTTP/1.1 200 OK\r\nContent-Type: {contentType}\r\nContent-Length: {payload.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n");
+        await stream.WriteAsync(header, ct).ConfigureAwait(false);
+        if (method != "HEAD")
+            await stream.WriteAsync(payload, ct).ConfigureAwait(false);
     }
 
     private async Task ServeMediaAsync(NetworkStream stream, string[] headers, string method, CancellationToken ct)
@@ -319,6 +383,7 @@ internal sealed class LocalMediaServer : IDisposable
         Token = "";
         MediaPath = null;
         MediaProxyUrl = null;
+        LiveMediaDirectory = null;
         StateProvider = null;
         ViewerPresenceRegistry.EndSession();
     }

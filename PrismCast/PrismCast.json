@@ -2,7 +2,7 @@
   "Author": "sinthen91",
   "Name": "PrismCast",
   "Punchline": "Synchronized world-space media for FFXIV.",
-  "Description": "Host synchronized local, web, YouTube, or Plex media on an in-game world-space screen.",
+  "Description": "Synchronized local, web, Plex, and live screen-sharing watch parties for FFXIV.",
   "InternalName": "PrismCast",
   "ApplicableVersion": "any",
   "Tags": [

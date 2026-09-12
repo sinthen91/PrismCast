@@ -159,6 +159,9 @@ float4 PS(VOut i, bool front : SV_IsFrontFace) : SV_TARGET
             var previousRtvs = ctx.OutputMerger.GetRenderTargets(1, out var previousDsv);
             var previousVs = ctx.VertexShader.Get();
             var previousPs = ctx.PixelShader.Get();
+            var previousGs = ctx.GeometryShader.Get();
+            var previousHs = ctx.HullShader.Get();
+            var previousDs = ctx.DomainShader.Get();
             var previousLayout = ctx.InputAssembler.InputLayout;
             var previousTopology = ctx.InputAssembler.PrimitiveTopology;
             var previousRasterizer = ctx.Rasterizer.State;
@@ -181,6 +184,12 @@ float4 PS(VOut i, bool front : SV_IsFrontFace) : SV_TARGET
                 ctx.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleStrip;
                 ctx.VertexShader.Set(_vs);
                 ctx.VertexShader.SetConstantBuffer(0, _constantBuffer);
+                // PrismCast owns this complete draw pipeline. Leaving a game, post-process,
+                // or overlay shader bound in any optional stage can reinterpret our triangle
+                // strip and produce detached pieces on only the affected machine.
+                ctx.HullShader.Set(null);
+                ctx.DomainShader.Set(null);
+                ctx.GeometryShader.Set(null);
                 ctx.PixelShader.Set(_ps);
                 ctx.PixelShader.SetShaderResource(0, _srv);
                 ctx.PixelShader.SetSampler(0, _sampler);
@@ -198,6 +207,12 @@ float4 PS(VOut i, bool front : SV_IsFrontFace) : SV_TARGET
                 previousVs?.Dispose();
                 ctx.PixelShader.Set(previousPs);
                 previousPs?.Dispose();
+                ctx.GeometryShader.Set(previousGs);
+                previousGs?.Dispose();
+                ctx.HullShader.Set(previousHs);
+                previousHs?.Dispose();
+                ctx.DomainShader.Set(previousDs);
+                previousDs?.Dispose();
                 ctx.InputAssembler.InputLayout = previousLayout;
                 previousLayout?.Dispose();
                 ctx.InputAssembler.PrimitiveTopology = previousTopology;
@@ -228,6 +243,14 @@ float4 PS(VOut i, bool front : SV_IsFrontFace) : SV_TARGET
         if (render == null)
             return null;
 
+        var world =
+            Matrix4x4.CreateScale(BaseWidth * Scale, BaseHeight * Scale, Scale) *
+            Matrix4x4.CreateFromYawPitchRoll(Yaw, Pitch, Roll) *
+            Matrix4x4.CreateTranslation(Position);
+
+        // Keep the known-good PrismCast camera conversion. FFXIV's stored render matrices
+        // use a different convention than this row-vector shader and transformed the screen
+        // out of view in Alpha.47 even though video/audio playback remained active.
         var view = Matrix4x4.CreateLookAt(
             ToNumerics(scene->Position),
             ToNumerics(scene->LookAtVector),
@@ -239,12 +262,43 @@ float4 PS(VOut i, bool front : SV_IsFrontFace) : SV_TARGET
             render->NearPlane,
             render->FarPlane);
 
-        var world =
-            Matrix4x4.CreateScale(BaseWidth * Scale, BaseHeight * Scale, Scale) *
-            Matrix4x4.CreateFromYawPitchRoll(Yaw, Pitch, Roll) *
-            Matrix4x4.CreateTranslation(Position);
+        // If the orbit camera crosses the physical screen plane, skip that frame instead
+        // of feeding near-plane intersections to the strip (the giant sliced rectangles).
+        if (Matrix4x4.Invert(world, out var inverseWorld))
+        {
+            var cameraLocal = Vector3.Transform(ToNumerics(scene->Position), inverseWorld);
+            if (cameraLocal.Z is > -0.35f and < 0.50f)
+                return null;
+        }
 
-        return world * view * projection;
+        var wvp = world * view * projection;
+
+        // Alpha.48 only tested the camera against the center of the plane. A large or
+        // curved screen can still straddle the near plane at an edge, leaving Direct3D to
+        // clip individual strip triangles into the disconnected slabs seen by viewers.
+        // Suppress the complete mesh whenever any sampled column reaches/ crosses it.
+        if (!MeshIsSafelyInFrontOfCamera(wvp, Curved ? CurveDepth : 0f))
+            return null;
+
+        return wvp;
+    }
+
+    private static bool MeshIsSafelyInFrontOfCamera(Matrix4x4 wvp, float curvature)
+    {
+        for (var column = 0; column <= CurveSegments; column++)
+        {
+            var x = -1f + 2f * column / CurveSegments;
+            var z = curvature * x * x;
+            for (var row = 0; row < 2; row++)
+            {
+                var y = row == 0 ? -1f : 1f;
+                var clip = Vector4.Transform(new Vector4(x, y, z, 1f), wvp);
+                if (!float.IsFinite(clip.W) || clip.W <= 0.15f)
+                    return false;
+            }
+        }
+
+        return true;
     }
 
     private static Matrix4x4 CreateReversedZ(float fov, float aspect, float near, float far)

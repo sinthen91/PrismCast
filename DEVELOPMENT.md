@@ -2,7 +2,7 @@
 
 ## Current baseline
 
-- Version: `0.2.0-alpha.41`
+- Version: `0.2.0-alpha.61`
 - Canonical project: `PrismCast/PrismCast.csproj`
 - Dalamud API: 15
 - Target: .NET 10 / Windows x64
@@ -10,7 +10,7 @@
 
 ## Media sources
 
-PrismCast currently supports Plex libraries discovered dynamically from the connected server, Local Files, and Web / YouTube URLs. Media selection belongs in Library. Remote is for playback and world-screen controls.
+PrismCast supports Plex libraries discovered dynamically from the connected server, Local Files, Web / YouTube URLs, and host-selected screen/window capture. There is no browser companion or streaming-service account integration. Browser content uses Share Screen / Window. Media selection belongs in Library; Remote is for playback, session transport, and world-screen controls.
 
 ## Sessions
 

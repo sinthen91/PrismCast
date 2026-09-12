@@ -1,5 +1,8 @@
 ﻿$ErrorActionPreference = "Stop"
-$ProgressPreference = "SilentlyContinue"
+$ProgressPreference = "Continue"
+
+Write-Host "PowerShell started successfully." -ForegroundColor Green
+Write-Host "Preparing PrismCast build environment..." -ForegroundColor Cyan
 
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Tools = Join-Path $Root ".tools"
@@ -20,12 +23,21 @@ $env:DOTNET_NOLOGO = "1"
 
 function Write-Step([string]$Text) {
     Write-Host ""
-    Write-Host "==> $Text"
+    Write-Host "==> $Text" -ForegroundColor Cyan
 }
 
 function Find-Dotnet10 {
-    # Always use PrismCast's project-local SDK. Do not probe the system dotnet:
-    # a runtime-only system installation prints misleading "No .NET SDKs" errors.
+    # Prefer an existing system .NET 10 SDK. A runtime-only installation does not
+    # count; --list-sdks must report an actual 10.x SDK before it is selected.
+    $systemDotnet = Get-Command dotnet.exe -ErrorAction SilentlyContinue
+    if ($systemDotnet) {
+        $sdkList = & $systemDotnet.Source --list-sdks 2>$null
+        if ($sdkList -match '(?m)^10\.') {
+            Write-Step "Using installed .NET 10 SDK"
+            return $systemDotnet.Source
+        }
+    }
+
     $sdkRoot = Join-Path $PrivateDotnetDir "sdk"
     $hasPrivateSdk10 = $false
     if ((Test-Path $PrivateDotnet) -and (Test-Path $sdkRoot)) {
@@ -51,13 +63,15 @@ function Find-Dotnet10 {
 
     New-Item -ItemType Directory -Force -Path $PrivateDotnetDir | Out-Null
     $installer = Join-Path $Tools "dotnet-install.ps1"
-    Invoke-WebRequest "https://dot.net/v1/dotnet-install.ps1" -OutFile $installer
+    Write-Host "Downloading the Microsoft .NET installer..." -ForegroundColor Yellow
+    Invoke-WebRequest "https://dot.net/v1/dotnet-install.ps1" -OutFile $installer -UseBasicParsing
 
     # Installer output goes straight to the console. We validate installation by
     # checking the actual executable and SDK directory instead of trusting
     # LASTEXITCODE, which is unreliable here when dotnet-install reports that an
     # SDK is already present.
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $installer -Version 10.0.401 -InstallDir $PrivateDotnetDir | Out-Host
+    Write-Host "Downloading and installing .NET SDK 10.0.401. This is the longest first-build step." -ForegroundColor Yellow
+    & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $installer -Version 10.0.401 -InstallDir $PrivateDotnetDir | Out-Host
 
     $sdkRoot = Join-Path $PrivateDotnetDir "sdk"
     $sdk10 = if (Test-Path $sdkRoot) {
@@ -100,15 +114,38 @@ Expected location is normally:
 }
 
 try {
-    Start-Transcript -Path $Log -Force | Out-Null
+    try { Start-Transcript -Path $Log -Force | Out-Null } catch {
+        Write-Host "Warning: build logging could not start, but the build will continue." -ForegroundColor Yellow
+    }
 
-    Write-Host "PrismCast local build"
-    Write-Host "Folder: $Root"
+    Write-Host "PrismCast local build" -ForegroundColor White
+    Write-Host "Folder: $Root" -ForegroundColor Gray
+
+    # Validate the complete source package before downloading an SDK or compiling.
+    # These files are copied into the public plugin package after the build.
+    $requiredInputs = @(
+        $Project,
+        $NugetConfig,
+        (Join-Path $Root "LICENSE.md"),
+        (Join-Path $Root "THIRD_PARTY_NOTICES.md"),
+        (Join-Path $Root "NOTICE"),
+        (Join-Path $Root "licenses")
+    )
+    $missingInputs = @($requiredInputs | Where-Object { -not (Test-Path $_) })
+    if ($missingInputs.Count -gt 0) {
+        throw "Source package is incomplete. Missing required path(s):`n  $($missingInputs -join "`n  ")`nDownload and extract the complete PrismCast source package again."
+    }
 
     $Dotnet = Find-Dotnet10
-    $env:DOTNET_ROOT = $PrivateDotnetDir
-    $env:DOTNET_ROOT_X64 = $PrivateDotnetDir
-    $env:PATH = $PrivateDotnetDir + ";" + $env:PATH
+    if ($Dotnet -eq $PrivateDotnet) {
+        $env:DOTNET_ROOT = $PrivateDotnetDir
+        $env:DOTNET_ROOT_X64 = $PrivateDotnetDir
+        $env:PATH = $PrivateDotnetDir + ";" + $env:PATH
+    }
+    else {
+        $systemDotnetDir = Split-Path -Parent $Dotnet
+        $env:PATH = $systemDotnetDir + ";" + $env:PATH
+    }
     Write-Host "Using .NET: $Dotnet"
 
     Write-Step "Bootstrapping Dalamud.NET.Sdk 15.0.0"
@@ -151,7 +188,9 @@ try {
     Write-Step "Packaging"
     Remove-Item $Dev -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force -Path $Dev | Out-Null
-    Copy-Item (Join-Path $Output "*") $Dev -Recurse -Force
+    Get-ChildItem $Output -File | Where-Object {
+        $_.Extension -in '.dll', '.json', '.pdb'
+    } | Copy-Item -Destination $Dev -Force
     Copy-Item (Join-Path $Root "LICENSE.md") $Dev -Force
     Copy-Item (Join-Path $Root "THIRD_PARTY_NOTICES.md") $Dev -Force
     Copy-Item (Join-Path $Root "NOTICE") $Dev -Force
@@ -162,17 +201,17 @@ try {
     Compress-Archive -Path (Join-Path $Dev "*") -DestinationPath $Zip -Force
 
     Write-Host ""
-    Write-Host "BUILD COMPLETE"
-    Write-Host "Dev DLL: $Dev\PrismCast.dll"
-    Write-Host "Package: $Zip"
+    Write-Host "BUILD COMPLETE" -ForegroundColor Green
+    Write-Host "Dev DLL: $Dev\PrismCast.dll" -ForegroundColor White
+    Write-Host "Package: $Zip" -ForegroundColor White
     Write-Host ""
     Write-Host "Dalamud Dev Plugin Location must point to the DLL above, not the folder."
 }
 catch {
     Write-Host ""
-    Write-Host "================ BUILD ERROR ================"
-    Write-Host $_
-    Write-Host "============================================="
+    Write-Host "================ BUILD ERROR ================" -ForegroundColor Red
+    Write-Host $_ -ForegroundColor Red
+    Write-Host "=============================================" -ForegroundColor Red
     exit 1
 }
 finally {

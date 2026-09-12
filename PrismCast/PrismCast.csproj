@@ -9,7 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>PrismCast</AssemblyName>
     <RootNamespace>PrismCast</RootNamespace>
-    <Version>0.2.0.41</Version>
+    <Version>0.2.0.61</Version>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <CopyLocalLockfileAssemblies>true</CopyLocalLockfileAssemblies>
@@ -20,8 +20,10 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <EmbeddedResource Include="Assets\prismcast-logo.png" />
+    <EmbeddedResource Include="Assets\prismcast-icon.png" />
     <EmbeddedResource Include="Assets\play-white.png" />
     <EmbeddedResource Include="Assets\pause-white.png" />
+    <EmbeddedResource Include="Assets\prismcast-startup.mp4" />
     <PackageReference Include="SharpCompress" Version="0.50.4" />
     <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
     <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />

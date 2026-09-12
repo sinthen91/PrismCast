@@ -201,6 +201,20 @@ export default {
       return json({ ok: true });
     }
 
+    if (request.method === "POST" && url.pathname === "/room/delete") {
+      const body = await request.json();
+      if (!body?.secret || !body?.roomId)
+        return json({ error: "missing fields" }, 400);
+      const room = await getRoom(env, String(body.roomId).toUpperCase());
+      if (!room) return json({ error: "room not found" }, 404);
+      if (await hostId(body.secret) !== room.hostId)
+        return json({ error: "forbidden" }, 403);
+      await env.SESSIONS.delete(`room-invite:${room.inviteCode}`);
+      await env.SESSIONS.delete(`room-live:${room.roomId}`);
+      await env.SESSIONS.delete(`room:${room.roomId}`);
+      return json({ ok: true });
+    }
+
     if (request.method === "POST" && url.pathname === "/room/kick") {
       const body = await request.json();
       if (!body?.secret || !body?.roomId || !body?.viewerId)

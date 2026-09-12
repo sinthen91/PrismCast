@@ -44,5 +44,6 @@ PrismCast downloads unmodified runtime components from their upstream release ch
 - yt-dlp
 - Deno
 - cloudflared
+- FFmpeg
 
 Those components retain their respective upstream licenses and are not re-licensed by PrismCast. PrismCast does not bundle those runtime binaries in its source repository.
