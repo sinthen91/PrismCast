@@ -1,30 +1,38 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
-import fs from 'node:fs';
 import path from 'node:path';
+import { groupRoutes } from './groups-v2.mjs';
+import { loadState, writeState } from './state-store.mjs';
 
 const PORT=Number(process.env.PORT||3000);
 const FILE=process.env.DATA_FILE||path.join(process.cwd(),'data','state.json');
 const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-let db={};
-try{db=JSON.parse(fs.readFileSync(FILE,'utf8'))||{}}catch{}
-const save=()=>{fs.mkdirSync(path.dirname(FILE),{recursive:true});fs.writeFileSync(FILE,JSON.stringify(db));};
+let db=loadState(FILE);
+const save=()=>writeState(FILE,db);
 const get=k=>{const r=db[k];if(!r)return null;if(r.exp&&r.exp<=Date.now()){delete db[k];save();return null}return r.v};
 const put=(k,v,ttl=0)=>{db[k]={v,exp:ttl?Date.now()+ttl*1000:0};save()};
 const del=k=>{if(k in db){delete db[k];save()}};
 const hid=s=>crypto.createHash('sha256').update(String(s)).digest('hex').slice(0,20);
 const code=n=>{const b=crypto.randomBytes(n);return [...b].map(x=>A[x%A.length]).join('')};
-const headers={'content-type':'application/json; charset=utf-8','access-control-allow-origin':'*','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type','cache-control':'no-store'};
+const headers={'content-type':'application/json; charset=utf-8','access-control-allow-origin':'*','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type,authorization','cache-control':'no-store'};
 const send=(res,x,status=200)=>{res.writeHead(status,headers);res.end(typeof x==='string'?x:JSON.stringify(x))};
-const body=async req=>{let a=[];for await(const c of req)a.push(c);return a.length?JSON.parse(Buffer.concat(a).toString('utf8')):{}};
+const body=async req=>{if(req.parsedBody)return req.parsedBody;let a=[],size=0;for await(const c of req){size+=c.length;if(size>262144)throw new Error('body too large');a.push(c)}return req.parsedBody=a.length?JSON.parse(Buffer.concat(a).toString('utf8')):{}};
 const room=id=>{const x=get(`room:${id}`);return x?JSON.parse(x):null};
 const putRoom=r=>put(`room:${r.roomId}`,JSON.stringify(r));
 const view=(r,live=null,invite=false,members=false)=>({roomId:r.roomId,name:r.name,isPrivate:true,hostId:r.hostId,inviteCode:invite?r.inviteCode:'',memberCount:Object.keys(r.members||{}).length,live:!!live,sessionInviteCode:live?.inviteCode||'',title:live?.title||'',hostName:live?.hostName||'',members:members?Object.entries(r.members||{}).map(([viewerId,v])=>({viewerId,firstName:v?.firstName||'Viewer',isHost:!!v?.host})):[]});
 
+const v2=groupRoutes({room,putRoom,get,put,del,code,hid});
 async function app(req,res){
  if(req.method==='OPTIONS'){res.writeHead(204,headers);return res.end()}
  const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`),p=u.pathname;
- if(req.method==='GET'&&(p==='/'||p==='/health'))return send(res,{service:'PrismCast directory',ok:true,version:1});
+ if(req.method==='GET'&&(p==='/'||p==='/health'))return send(res,{service:'PrismCast directory',ok:true,version:2});
+ if(await v2(req,res,u,body,send))return;
+ // Upgraded groups cannot be read or changed through unauthenticated legacy APIs.
+ if(p.startsWith('/room/')&&!['/room/create','/room/announce','/room/close-session'].includes(p)){
+  const b=req.method==='POST'?await body(req):{};
+  const c=String(b.code||b.roomId||p.split('/').pop()).trim().toUpperCase();
+  if(room(get(`room-invite:${c}`)||c)?.secure)return send(res,{error:'Updated authenticated group API required'},426);
+ }
  if(req.method==='POST'&&p==='/temporary/announce'){
   const b=await body(req);if(!b?.secret||!b?.code||!b?.inviteCode)return send(res,{error:'missing fields'},400);
   const c=String(b.code).trim().toUpperCase();put(`temp:${c}`,JSON.stringify({inviteCode:b.inviteCode,hostId:hid(b.secret),hostName:b.hostName||'Host',title:b.title||'PrismCast session',updated:Date.now()}),180);return send(res,{ok:true,code:c});
@@ -62,4 +70,4 @@ async function app(req,res){
 }
 
 setInterval(()=>{for(const k of Object.keys(db))get(k)},60000).unref();
-http.createServer((req,res)=>app(req,res).catch(e=>{console.error(e);if(!res.headersSent)send(res,{error:'internal error'},500);else res.end()})).listen(PORT,'0.0.0.0',()=>console.log(`PrismCast directory listening on :${PORT}`));
+http.createServer((req,res)=>app(req,res).catch(e=>{console.error('Directory request failed:',e.name);if(!res.headersSent)send(res,{error:'internal error'},500);else res.end()})).listen(PORT,'0.0.0.0',()=>console.log(`PrismCast directory listening on :${PORT}`));
