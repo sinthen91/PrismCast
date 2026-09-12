@@ -1,6 +1,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import path from 'node:path';
+import { supportRoutes } from './support.mjs';
 import { groupRoutes } from './groups-v2.mjs';
 import { loadState, writeState } from './state-store.mjs';
 
@@ -16,16 +17,18 @@ const hid=s=>crypto.createHash('sha256').update(String(s)).digest('hex').slice(0
 const code=n=>{const b=crypto.randomBytes(n);return [...b].map(x=>A[x%A.length]).join('')};
 const headers={'content-type':'application/json; charset=utf-8','access-control-allow-origin':'*','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type,authorization','cache-control':'no-store'};
 const send=(res,x,status=200)=>{res.writeHead(status,headers);res.end(typeof x==='string'?x:JSON.stringify(x))};
-const body=async req=>{if(req.parsedBody)return req.parsedBody;let a=[],size=0;for await(const c of req){size+=c.length;if(size>262144)throw new Error('body too large');a.push(c)}return req.parsedBody=a.length?JSON.parse(Buffer.concat(a).toString('utf8')):{}};
+const body=async req=>{if(req.parsedBody)return req.parsedBody;let a=[],size=0;for await(const c of req){size+=c.length;if(size>(req.url?.startsWith('/support/')?1500000:262144))throw new Error('body too large');a.push(c)}return req.parsedBody=a.length?JSON.parse(Buffer.concat(a).toString('utf8')):{}};
 const room=id=>{const x=get(`room:${id}`);return x?JSON.parse(x):null};
 const putRoom=r=>put(`room:${r.roomId}`,JSON.stringify(r));
 const view=(r,live=null,invite=false,members=false)=>({roomId:r.roomId,name:r.name,isPrivate:true,hostId:r.hostId,inviteCode:invite?r.inviteCode:'',memberCount:Object.keys(r.members||{}).length,live:!!live,sessionInviteCode:live?.inviteCode||'',title:live?.title||'',hostName:live?.hostName||'',members:members?Object.entries(r.members||{}).map(([viewerId,v])=>({viewerId,firstName:v?.firstName||'Viewer',isHost:!!v?.host})):[]});
 
 const v2=groupRoutes({room,putRoom,get,put,del,code,hid});
+const support=supportRoutes({get,put,del,origin:process.env.SUPPORT_ORIGIN,ownerId:process.env.SUPPORT_OWNER_GITHUB_ID});
 async function app(req,res){
  if(req.method==='OPTIONS'){res.writeHead(204,headers);return res.end()}
  const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`),p=u.pathname;
- if(req.method==='GET'&&(p==='/'||p==='/health'))return send(res,{service:'PrismCast directory',ok:true,version:2,mediaVersion:1});
+ if(req.method==='GET'&&(p==='/'||p==='/health'))return send(res,{service:'PrismCast directory',ok:true,version:2,mediaVersion:1,supportVersion:1});
+ if(await support(req,res,u,body))return;
  if(await v2(req,res,u,body,send))return;
  // Upgraded groups cannot be read or changed through unauthenticated legacy APIs.
  if(p.startsWith('/room/')&&!['/room/create','/room/announce','/room/close-session'].includes(p)){
