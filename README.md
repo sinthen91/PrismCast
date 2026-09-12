@@ -90,7 +90,7 @@ Watch Party short codes and persistent Group metadata are resolved through Prism
 
 ## Repository publishing
 
-Repository: `https://github.com/sinthen91/PrismCast`
+Repository: `https://raw.githubusercontent.com/sinthen91/PrismCast/main/pluginmaster.json`
 
 The repository tracks the confirmed PrismCast development baseline. Matching alpha packages should only be advertised after the local Windows/Dalamud build succeeds.
 
