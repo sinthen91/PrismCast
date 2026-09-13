@@ -4,9 +4,11 @@
 
 PrismCast brings synchronized movies, shows, videos, and live screen sharing into Final Fantasy XIV on a screen you place in the game world. Host a quick Watch Party with friends or build a saved theater with its own queue, standby screen, and playback permissions.
 
-[Download releases](https://github.com/Sinnsational/PrismCast/releases) · [Alpha.70 release notes](https://github.com/Sinnsational/PrismCast/releases/tag/v0.2.0-alpha.70) · [Installation](#installation) · [Getting started](#your-first-watch-party) · [Feedback & support](#feedback--support)
+[Download releases](https://github.com/Sinnsational/PrismCast/releases) · [Alpha.71 release notes](https://github.com/Sinnsational/PrismCast/releases/tag/v0.2.0-alpha.71) · [Installation](#installation) · [Getting started](#your-first-watch-party) · [Feedback & support](#feedback--support)
 
-This guide covers **0.2.0-alpha.70**, built for **Dalamud API 15**. PrismCast remains alpha software. Hosts and viewers should use the same version.
+This guide covers **0.2.0-alpha.71**, built for **Dalamud API 15**. PrismCast remains alpha software. Hosts and viewers should use the same version.
+
+**Alpha.71 playback fix:** Web/YouTube sources with separate video and audio streams are supported, playback failures now show an error, and preview messages distinguish metadata loading from actual playback.
 
 ## What you can do
 
@@ -36,7 +38,7 @@ You need the Windows version of FFXIV with XIVLauncher/Dalamud and a compatible 
 3. Save, open the **Plugin Installer**, search for **PrismCast**, and install it.
 4. Open PrismCast with `/prism` or `/prismcast`, then follow the startup wizard.
 
-**Current release:** [Alpha.70](https://github.com/Sinnsational/PrismCast/releases/tag/v0.2.0-alpha.70) is available through the custom repository. Existing users can update PrismCast from the Plugin Installer.
+**Current release:** [Alpha.71](https://github.com/Sinnsational/PrismCast/releases/tag/v0.2.0-alpha.71) is available through the custom repository. Existing users can update PrismCast from the Plugin Installer.
 
 PrismCast downloads its playback tools automatically as needed. The first playback or hosting attempt can take longer while they are prepared. Viewers do not need to install these tools manually or configure a relay.
 
@@ -169,6 +171,6 @@ The `directory-service/` folder contains the Railway-compatible directory and su
 
 ## Releases and license
 
-See [GitHub Releases](https://github.com/Sinnsational/PrismCast/releases) for version history and downloadable packages, including the changes from Alpha.61 to Alpha.70.
+See [GitHub Releases](https://github.com/Sinnsational/PrismCast/releases) for version history and downloadable packages, including the changes from Alpha.61 to Alpha.70 and the Alpha.71 Web/YouTube playback fix.
 
 PrismCast is distributed under **AGPL-3.0-or-later**. See [LICENSE.md](LICENSE.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for licensing and attribution.
