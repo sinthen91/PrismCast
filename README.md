@@ -36,7 +36,7 @@ You need the Windows version of FFXIV with XIVLauncher/Dalamud and a compatible 
 3. Save, open the **Plugin Installer**, search for **PrismCast**, and install it.
 4. Open PrismCast with `/prism` or `/prismcast`, then follow the startup wizard.
 
-**Release availability:** Alpha.70 is available on the [Releases page](https://github.com/Sinnsational/PrismCast/releases/tag/v0.2.0-alpha.70). At this README update, the custom repository feed still advertises Alpha.61. Installing through that feed will provide Alpha.61 until it is updated; the Alpha.70 theater and support features require the newer package.
+**Current release:** [Alpha.70](https://github.com/Sinnsational/PrismCast/releases/tag/v0.2.0-alpha.70) is available through the custom repository. Existing users can update PrismCast from the Plugin Installer.
 
 PrismCast downloads its playback tools automatically as needed. The first playback or hosting attempt can take longer while they are prepared. Viewers do not need to install these tools manually or configure a relay.
 
