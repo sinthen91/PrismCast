@@ -5,20 +5,20 @@
     "Punchline": "Your media. Your friends. One screen. Watch together anywhere in Eorzea.",
     "Description": "Synchronized local, web, Plex, and live screen-sharing watch parties for FFXIV.",
     "InternalName": "PrismCast",
-    "AssemblyVersion": "0.2.0.61",
-    "TestingAssemblyVersion": "0.2.0.61",
+    "AssemblyVersion": "0.2.0.70",
+    "TestingAssemblyVersion": "0.2.0.70",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
-    "DownloadLinkInstall": "https://github.com/Sinnsational/PrismCast/releases/download/v0.2.0-alpha.61/PrismCast.zip",
-    "DownloadLinkUpdate": "https://github.com/Sinnsational/PrismCast/releases/download/v0.2.0-alpha.61/PrismCast.zip",
-    "DownloadLinkTesting": "https://github.com/Sinnsational/PrismCast/releases/download/v0.2.0-alpha.61/PrismCast.zip",
+    "DownloadLinkInstall": "https://github.com/Sinnsational/PrismCast/releases/download/v0.2.0-alpha.70/PrismCast.zip",
+    "DownloadLinkUpdate": "https://github.com/Sinnsational/PrismCast/releases/download/v0.2.0-alpha.70/PrismCast.zip",
+    "DownloadLinkTesting": "https://github.com/Sinnsational/PrismCast/releases/download/v0.2.0-alpha.70/PrismCast.zip",
     "RepoUrl": "https://github.com/Sinnsational/PrismCast",
     "Tags": [
       "utility",
       "media",
       "social"
     ],
-    "Changelog": "Alpha.61: adds 720p30, 1080p30, and 1080p60 Screen Share quality presets, per-device subtitle control, and removes the redundant Session footer player.",
+    "Changelog": "Alpha.70: adds saved theaters, persistent queues and Saved Media, moderator roles and remote delegation, looping standby videos, improved Remote and screen controls, a spotlight setup tour and searchable User Manual, and private in-app Feedback & Support.",
     "IconUrl": "https://raw.githubusercontent.com/Sinnsational/PrismCast/main/PrismCast/Assets/prismcast-icon.png?v=2"
   }
 ]
